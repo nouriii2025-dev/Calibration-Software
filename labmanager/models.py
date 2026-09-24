@@ -104,6 +104,7 @@ class Certificate(models.Model):
     device_manufacturer = models.CharField(max_length=150, blank=True)
     device_resolution = models.CharField(max_length=100, blank=True)
     device_accuracy = models.CharField(max_length=100, blank=True)
+    device_ratio = models.CharField(max_length=100, blank=True)
 
     # --- Working standard used to calibrate it ---
     working_standard_name = models.CharField(max_length=150, blank=True)
@@ -241,7 +242,7 @@ class JobLineItem(models.Model):
     unit = models.CharField(max_length=50, blank=True, null=True, choices=UNIT_CHOICES)
     quantity = models.PositiveIntegerField(default=1)
     assigned_to = models.ForeignKey(User, on_delete=models.PROTECT,  related_name="assigned_line_items", limit_choices_to={"role": User.Role.TECHNICIAN},)
-    calibration_points = models.PositiveIntegerField(default=0)
+    calibration_points = models.PositiveIntegerField(default=1)
     calibration_validity = models.CharField(max_length=100, blank=True) 
     reference_procedure = models.CharField(max_length=150, blank=True, choices=REFERENCE_PROCEDURE_CHOICES)
 
@@ -258,12 +259,23 @@ class JobLineItem(models.Model):
         return f"{certs[0].number} – {certs[-1].number}"
 
     def assign_certificates(self):
-        """Pull the next `quantity` unassigned certificates from the job's
-        pool and fix them to this line item, in sequential order."""
-        available = self.job.certificates.filter(line_item__isnull=True).order_by("number")[: self.quantity]
+        """Assign the next available certificates to this line item
+        and copy the selected reference procedure to each certificate.
+        """
+        available = (
+            self.job.certificates
+            .filter(line_item__isnull=True)
+            .order_by("number")[:self.quantity]
+        )
+
         for cert in available:
             cert.line_item = self
-            cert.save(update_fields=["line_item"])
+            cert.reference_procedure = self.reference_procedure
+
+            cert.save(update_fields=[
+                "line_item",
+                "reference_procedure",
+            ])
 
 
 def job_document_path(instance, filename):

@@ -15,6 +15,7 @@
                 <a href="{% url 'dashboard' %}">Dashboard</a>
                 {% if user.is_lab_head %}
                     <a href="{% url 'job_create' %}">New Job</a>
+                    <a href="{% url 'uncertainty' %}">Uncertainty Analysis</a>
                     <a href="{% url 'instrument_list' %}">Instruments</a>
                     <a href="{% url 'technician_list' %}">Technicians</a>
                 {% endif %}

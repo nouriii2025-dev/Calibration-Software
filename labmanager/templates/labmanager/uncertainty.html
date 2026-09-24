@@ -1,0 +1,255 @@
+{% extends "labmanager/base.html" %}
+{% load static %}
+{% block title %}Uncertainty Calculation{% endblock %}
+{% block content %}
+<h1>Uncertainty Calculation</h1>
+
+<div id="uncertainty-page">
+
+    <div class="card">
+        <h2>Instrument Setup</h2>
+        <div class="row">
+            <div>
+                <label>Resolution</label>
+                <input type="number" step="any" id="resolution">
+            </div>
+            <div>
+                <label>Ratio</label>
+                <input type="number" step="any" id="ratio">
+            </div>
+            <div>
+                <label>Assumed Resolution</label>
+                <input type="text" id="assumedRes">
+            </div>
+        </div>
+        <div class="row">
+            <div>
+                <label>Reference Instrument Range</label>
+                <input type="number" step="any" id="refRange">
+            </div>
+            <div>
+                <label>UUC Full Scale</label>
+                <input type="number" step="any" id="fullScale">
+            </div>
+            <div>
+                <label>UUC Unit</label>
+                <select id="unit">
+                    <option value="bar" data-factor="1" selected>bar</option>
+                    <option value="psi" data-factor="14.5038">psi</option>
+                    <option value="kPa" data-factor="100">kPa</option>
+                    <option value="MPa" data-factor="0.1">MPa</option>
+                    <option value="kgf/cm²" data-factor="1.01972">kgf/cm²</option>
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <!-- <div>
+                <label>Conversion from bar</label>
+                <input type="number" step="any" id="convFactor">
+                <p class="muted">Applied to "Std. Un. for Press Tx" only when the unit is not bar</p>
+            </div>
+            <div>
+                <label>Coverage Factor (k)</label>
+                <input type="number" step="any" id="kFactor">
+            </div> -->
+            <div>
+                <label>Pressure Media</label>
+                <select id="media">
+                    <option>Pneumatic</option>
+                    <option>Hydraulic</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Calibration Points</h2>
+        <p class="muted">Enter the applied pressure and readings for each point. Mean, deviation, hysteresis and uncertainty values are calculated automatically.</p>
+        <div class="table-scroll">
+        <table class="line-items-table" id="calc-table">
+            <thead>
+                <tr>
+                    <th>Applied Pressure</th>
+                    <th>M1</th>
+                    <th>M2</th>
+                    <th>Mean Value</th>
+                    <th>Deviation</th>
+                    <th>Repeatability</th>
+                    <th>Hysteresis (M2 − M1)</th>
+                    <th>Std. Un. for Hysteresis</th>
+                    <th>Un. due to Resolution</th>
+                    <th>Std. Un. for Press Tx</th>
+                    <th>Combined Std. Uncertainty</th>
+                    <th>Expanded Uncertainty</th>
+                    <th>Expanded Un. (% of FSD)</th>
+                    <th>Accutech CMC (% of FSD)</th>
+                    <th>Max Expanded Un. (% of FSD)</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="calc-body"></tbody>
+        </table>
+        </div>
+        <button type="button" class="btn secondary small" id="add-point" style="margin-top:0.75rem;">+ Add calibration point</button>
+        <span class="muted" id="rowCount" style="margin-left:0.75rem;"></span>
+    </div>
+
+  <!-- <details class="unc-card unc-formulas">
+    <summary>How each column is calculated</summary>
+    <ul>
+      <li><b>Assumed resolution</b> = Resolution × Ratio</li>
+      <li><b>Mean value</b> = (M1 + M2) / 2 &nbsp;·&nbsp; <b>Deviation</b> = Applied pressure − Mean value</li>
+      <li><b>Hysteresis</b> = M2 − M1 &nbsp;·&nbsp; <b>Std. un. for hysteresis</b> = Hysteresis / (2√3)</li>
+      <li><b>Un. due to resolution</b> = Assumed resolution / √3</li>
+      <li><b>Combined std. uncertainty</b> = √(u<sub>hysteresis</sub>² + u<sub>resolution</sub>² + u<sub>press&nbsp;Tx</sub>²)</li>
+      <li><b>Expanded uncertainty</b> = k × Combined &nbsp;·&nbsp; <b>% of FSD</b> = Expanded / UUC full scale × 100</li>
+      <li><b>Max expanded un.</b> = larger of Accutech CMC and the expanded % (rounded to 2 decimals)</li>
+    </ul>
+  </details> -->
+
+</div>
+
+<style>
+    /* Only what the existing stylesheet doesn't already cover */
+    #calc-table .calc-cell {
+        background: #f6f7f9;
+        text-align: right;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+    #calc-table .calc-cell.strong { font-weight: 600; }
+    #calc-table input { min-width: 90px; }
+    @media print {
+        .btn, .remove-row, #add-point { display: none !important; }
+    }
+</style>
+
+<script>
+(function () {
+    const SQRT3 = Math.sqrt(3);
+
+    const $ = (id) => document.getElementById(id);
+    const body = $('calc-body');
+
+    const num = (v) => { const n = parseFloat(v); return isFinite(n) ? n : NaN; };
+    const fmt = (n, d) => isFinite(n) ? n.toFixed(d) : '—';
+
+    const inputCell = (f, v) =>
+        `<td><input type="number" step="any" data-f="${f}" value="${v ?? ''}"></td>`;
+    const calcCell = (o, extra) =>
+        `<td class="calc-cell ${extra || ''}" data-o="${o}">—</td>`;
+
+    function addRow(d) {
+        d = d || {};
+        const tr = document.createElement('tr');
+        tr.className = 'line-item-row';
+        tr.innerHTML =
+            inputCell('applied', d.applied) +
+            inputCell('m1', d.m1) +
+            inputCell('m2', d.m2) +
+            inputCell('mean', d.mean) +
+            inputCell('dev', d.dev) +
+            calcCell('rep') +
+            calcCell('hyst') +
+            calcCell('uhyst') + calcCell('ures') +
+            inputCell('ptx', d.ptx) +
+            calcCell('comb', 'strong') + calcCell('exp', 'strong') + calcCell('pct', 'strong') +
+            calcCell('cmc') +
+            calcCell('max', 'strong') +
+            '<td><button type="button" class="remove-row">✕</button></td>';
+        body.appendChild(tr);
+    }
+
+    function calculate() {
+        const assumed = num($('resolution').value) * num($('ratio').value);
+        const fsd = num($('fullScale').value);
+        const k = num($('kFactor').value);
+        const conv = $('unit').value === 'bar' ? 1 : (num($('convFactor').value) || 1);
+        const ures = assumed / SQRT3;
+
+        $('assumedRes').value = isFinite(assumed) ? +assumed.toFixed(6) : '—';
+
+        Array.from(body.rows).forEach(function (tr) {
+            const get = (f) => num(tr.querySelector(`[data-f="${f}"]`).value);
+            const set = (o, t) => { tr.querySelector(`[data-o="${o}"]`).textContent = t; };
+
+            const applied = get('applied'), m1 = get('m1'), m2 = get('m2');
+            const ptx = get('ptx') * conv, cmc = get('cmc');
+
+            const mean  = (m1 + m2) / 2;
+            const dev   = applied - mean;
+            const hyst  = m2 - m1;
+            const uhyst = hyst / (2 * SQRT3);
+
+            // Repeatability is an input only; the sheet does not include it in the combined value
+            const comb = Math.sqrt(uhyst * uhyst + ures * ures + ptx * ptx);
+            const exp  = k * comb;
+            const pct  = exp / fsd * 100;
+            const pct2 = Math.round(pct * 100) / 100;
+            const max  = isFinite(cmc) ? Math.max(cmc, pct2) : pct2;
+
+            set('mean',  fmt(mean, 3));
+            set('dev',   fmt(dev, 3));
+            set('hyst',  fmt(hyst, 2));
+            set('uhyst', fmt(uhyst, 5));
+            set('ures',  fmt(ures, 5));
+            set('comb',  fmt(comb, 6));
+            set('exp',   fmt(exp, 6));
+            set('pct',   fmt(pct, 4));
+            set('max',   fmt(max, 2));
+        });
+
+        const n = body.rows.length;
+        $('rowCount').textContent = n + ' calibration point' + (n === 1 ? '' : 's');
+    }
+
+    function reset() {
+        body.innerHTML = '';
+        DEFAULT_ROWS.forEach(addRow);
+        calculate();
+    }
+
+    function exportCsv() {
+        const head = ['Applied Pressure','M1','M2','Repeatability','Mean Value','Deviation','Hysteresis',
+                      'Std Un Hysteresis','Un due to Resolution','Std Un Press Tx','Combined Std Uncertainty',
+                      'Expanded Uncertainty','Expanded % FSD','Accutech CMC % FSD','Max Expanded % FSD'];
+        const cols = [['f','applied'],['f','m1'],['f','m2'],['f','rep'],['o','mean'],['o','dev'],['o','hyst'],
+                      ['o','uhyst'],['o','ures'],['f','ptx'],['o','comb'],['o','exp'],['o','pct'],['f','cmc'],['o','max']];
+        const lines = [head.join(',')];
+        Array.from(body.rows).forEach(function (tr) {
+            lines.push(cols.map(function (c) {
+                const el = tr.querySelector(c[0] === 'f' ? `[data-f="${c[1]}"]` : `[data-o="${c[1]}"]`);
+                const v = c[0] === 'f' ? el.value : el.textContent;
+                return v === '—' ? '' : v;
+            }).join(','));
+        });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
+        a.download = 'uncertainty.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    // Events
+    $('uncertainty-page').addEventListener('input', calculate);
+
+    $('unit').addEventListener('change', function () {
+        $('convFactor').value = this.options[this.selectedIndex].dataset.factor;
+        $('convFactor').disabled = this.value === 'bar';
+        calculate();
+    });
+
+    body.addEventListener('click', function (e) {
+        const btn = e.target.closest('.remove-row');
+        if (btn) { btn.closest('tr').remove(); calculate(); }
+    });
+
+    $('add-point').addEventListener('click', function () { addRow(); calculate(); });
+    $('btn-reset').addEventListener('click', reset);
+    $('btn-csv').addEventListener('click', exportCsv);
+    $('btn-print').addEventListener('click', function () { window.print(); });
+
+    reset();
+})();
+</script>
+{% endblock %}

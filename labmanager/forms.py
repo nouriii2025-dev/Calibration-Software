@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.forms import inlineformset_factory
 
-from .models import CalibrationResult, Certificate, Instrument, Job, JobDocument, JobLineItem, User
+from .models import *
 
 
 class SignUpForm(UserCreationForm):
@@ -84,21 +84,72 @@ JobDocumentFormSet = inlineformset_factory(
 )
 
 
+# class CertificateForm(forms.ModelForm):
+#     class Meta:
+#         model = Certificate
+#         fields = [
+#             "device_serial", "device_manufacturer", "device_resolution", "device_accuracy","device_ratio",
+#             "working_standard_name", "working_standard_serial", "working_standard_certificate_no",
+#             "lab_temperature", "lab_humidity", "ambient_pressure", "reference_procedure",
+#             "temperature_variation", "condition_notes",
+#             "calibration_date", "issue_date", "calibrated_by", "approved_signatory",
+#         ]
+#         widgets = {
+#             "condition_notes": forms.Textarea(attrs={"rows": 2}),
+#             "calibration_date": forms.DateInput(attrs={"type": "date"}),
+#             "issue_date": forms.DateInput(attrs={"type": "date"}),
+#         }
 class CertificateForm(forms.ModelForm):
+    certificate_number = forms.CharField(
+        label="Certificate No.",
+        required=False,
+        disabled=True,
+    )
+
     class Meta:
         model = Certificate
         fields = [
-            "device_serial", "device_manufacturer", "device_resolution", "device_accuracy",
-            "working_standard_name", "working_standard_serial", "working_standard_certificate_no",
-            "lab_temperature", "lab_humidity", "ambient_pressure", "reference_procedure",
-            "temperature_variation", "condition_notes",
-            "calibration_date", "issue_date", "calibrated_by", "approved_signatory",
+            "device_serial",
+            "device_manufacturer",
+            "device_resolution",
+            "device_accuracy",
+            "device_ratio",
+            "working_standard_name",
+            "working_standard_serial",
+            "working_standard_certificate_no",
+            "lab_temperature",
+            "lab_humidity",
+            "ambient_pressure",
+            "reference_procedure",
+            "temperature_variation",
+            "condition_notes",
+            "calibration_date",
+            "issue_date",
+            "calibrated_by",
+            "approved_signatory",
         ]
         widgets = {
             "condition_notes": forms.Textarea(attrs={"rows": 2}),
             "calibration_date": forms.DateInput(attrs={"type": "date"}),
             "issue_date": forms.DateInput(attrs={"type": "date"}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Show the automatically generated certificate number
+        if self.instance and self.instance.pk:
+            self.fields["certificate_number"].initial = self.instance.number
+
+            # For older certificates where reference_procedure is blank,
+            # take it from the assigned job line item.
+            if (
+                not self.instance.reference_procedure
+                and self.instance.line_item
+            ):
+                self.fields["reference_procedure"].initial = (
+                    self.instance.line_item.reference_procedure
+                )
 
 
 class CalibrationResultForm(forms.ModelForm):
@@ -114,17 +165,49 @@ class CalibrationResultForm(forms.ModelForm):
             "uncertainty",
             "remarks",
         ]
+        widgets = {
+            "mean_value": forms.NumberInput(
+                attrs={
+                    "readonly": "readonly",
+                    "class": "calculated-field",
+                }
+            ),
+            "deviation": forms.NumberInput(
+                attrs={
+                    "readonly": "readonly",
+                    "class": "calculated-field",
+                }
+            ),
+        }
 
-        
+def get_calibration_result_formset(certificate):
+    """
+    Create a calibration result formset.
 
+    On a new certificate, create rows according to calibration_points.
+    After results are saved, do not automatically create additional rows.
+    Additional rows must be added explicitly using the Add Result Row button.
+    """
 
-CalibrationResultFormSet = inlineformset_factory(
-    Certificate,
-    CalibrationResult,
-    form=CalibrationResultForm,
-    extra=1,
-    can_delete=True,
-)
+    calibration_points = 1
+
+    if certificate.line_item:
+        calibration_points = certificate.line_item.calibration_points or 1
+
+    existing_results = certificate.results.count()
+
+    # Only create the remaining required rows.
+    # Once the required rows exist, no automatic extra rows are created.
+    extra_rows = max(calibration_points - existing_results, 0)
+
+    return inlineformset_factory(
+        Certificate,
+        CalibrationResult,
+        form=CalibrationResultForm,
+        extra=extra_rows,
+        can_delete=True,
+    )
+
 
 
 class InstrumentForm(forms.ModelForm):

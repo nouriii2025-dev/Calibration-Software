@@ -32,6 +32,10 @@
                 <label>Accuracy</label>
                 {{ cert_form.device_accuracy }}
             </div>
+            <div>
+                <label>Ratio</label>
+                {{ cert_form.device_ratio }}
+            </div>
         </div>
         <p class="muted">Model / range come from the instrument line item: {{ certificate.line_item.model|default:"—" }} / {{ certificate.line_item.range|default:"—" }}</p>
     </div>
@@ -156,11 +160,6 @@
 
     <button type="submit" class="btn">Save Certificate</button>
 
-
-     <button type="submit" name="save_and_print" class="btn secondary">
-        Save & Print Certificate
-    </button>
-
     {% if certificate.calibration_date or certificate.results.exists %}
         <a
             href="{% url 'certificate_print' certificate.pk %}"
@@ -190,7 +189,7 @@
     </tbody>
 </table>
 
-<script>
+<!-- <script>
 (function () {
     const addBtn = document.getElementById('add-result');
     const body = document.getElementById('results-body');
@@ -211,6 +210,114 @@
         btn.addEventListener('click', function () {
             btn.closest('tr').remove();
         });
+    });
+})();
+</script> -->
+<script>
+(function () {
+    const addBtn = document.getElementById('add-result');
+    const body = document.getElementById('results-body');
+    const totalForms = document.getElementById('id_results-TOTAL_FORMS');
+
+    function calculateRow(row) {
+        const appliedInput = row.querySelector('input[name$="-applied_value"]');
+        const upwardInput = row.querySelector('input[name$="-upward_reading"]');
+        const downwardInput = row.querySelector('input[name$="-downward_reading"]');
+        const meanInput = row.querySelector('input[name$="-mean_value"]');
+        const deviationInput = row.querySelector('input[name$="-deviation"]');
+
+        if (!appliedInput || !upwardInput || !downwardInput ||
+            !meanInput || !deviationInput) {
+            return;
+        }
+
+        const applied = parseFloat(appliedInput.value);
+        const upward = parseFloat(upwardInput.value);
+        const downward = parseFloat(downwardInput.value);
+
+        // Calculate only when M1 and M2 are entered
+        if (!isNaN(upward) && !isNaN(downward)) {
+
+            // Mean = (M1 + M2) / 2
+            const mean = (upward + downward) / 2;
+
+            meanInput.value = mean.toFixed(3);
+
+            // Calculate deviation when Applied Pressure is available
+            if (!isNaN(applied)) {
+                // Deviation = A - M
+                const deviation = applied - mean;
+
+                deviationInput.value = deviation.toFixed(3);
+            } else {
+                deviationInput.value = '';
+            }
+
+        } else {
+            meanInput.value = '';
+            deviationInput.value = '';
+        }
+    }
+
+    function attachCalculation(row) {
+        const inputs = row.querySelectorAll(
+            'input[name$="-applied_value"], ' +
+            'input[name$="-upward_reading"], ' +
+            'input[name$="-downward_reading"]'
+        );
+
+        inputs.forEach(function (input) {
+            input.addEventListener('input', function () {
+                calculateRow(row);
+            });
+
+            input.addEventListener('change', function () {
+                calculateRow(row);
+            });
+        });
+    }
+
+    // Attach calculation to existing rows
+    body.querySelectorAll('.result-row').forEach(function (row) {
+        attachCalculation(row);
+
+        const removeBtn = row.querySelector('.remove-row');
+
+        if (removeBtn) {
+            removeBtn.addEventListener('click', function () {
+                row.remove();
+            });
+        }
+    });
+
+    // Add new result row
+    addBtn.addEventListener('click', function () {
+        const idx = parseInt(totalForms.value, 10);
+
+        const emptyRow = document
+            .getElementById('result-empty-row')
+            .querySelector('tr')
+            .cloneNode(true);
+
+        emptyRow.innerHTML = emptyRow.innerHTML.replace(
+            /__prefix__/g,
+            idx
+        );
+
+        body.appendChild(emptyRow);
+
+        totalForms.value = idx + 1;
+
+        // Enable calculation for the new row
+        attachCalculation(emptyRow);
+
+        const removeBtn = emptyRow.querySelector('.remove-row');
+
+        if (removeBtn) {
+            removeBtn.addEventListener('click', function () {
+                emptyRow.remove();
+            });
+        }
     });
 })();
 </script>

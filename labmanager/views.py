@@ -4,18 +4,10 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.views import LoginView
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from decimal import Decimal, ROUND_HALF_UP
 
-from .forms import (
-    CalibrationResultFormSet,
-    CertificateForm,
-    InstrumentForm,
-    JobDocumentFormSet,
-    JobForm,
-    JobLineItemFormSet,
-    SignUpForm,
-    TechnicianForm,
-)
-from .models import Certificate, Instrument, Job, User
+from .forms import *
+from .models import *
 
 
 def is_lab_head(user):
@@ -117,10 +109,16 @@ def _can_edit_certificate(user, certificate):
 
 @login_required
 def certificate_detail(request, pk):
-    certificate = get_object_or_404(Certificate, pk=pk)
+    certificate = get_object_or_404(
+        Certificate.objects.select_related("line_item"),
+        pk=pk
+    )
+
     if not _can_edit_certificate(request.user, certificate):
         messages.error(request, "You do not have access to that certificate.")
         return redirect("dashboard")
+
+    ResultFormSet = get_calibration_result_formset(certificate)
 
     if request.method == "POST":
         cert_form = CertificateForm(
@@ -128,7 +126,7 @@ def certificate_detail(request, pk):
             instance=certificate
         )
 
-        result_formset = CalibrationResultFormSet(
+        result_formset = ResultFormSet(
             request.POST,
             instance=certificate,
             prefix="results"
@@ -137,6 +135,49 @@ def certificate_detail(request, pk):
         if cert_form.is_valid() and result_formset.is_valid():
 
             cert_form.save()
+
+            # Calculate Mean and Deviation before saving results
+            for result_form in result_formset:
+                if result_form.cleaned_data.get("DELETE"):
+                    continue
+
+                applied = result_form.cleaned_data.get("applied_value")
+                upward = result_form.cleaned_data.get("upward_reading")
+                downward = result_form.cleaned_data.get("downward_reading")
+
+                if applied is not None and upward is not None and downward is not None:
+
+                    # Convert form values to numbers
+                    # applied = float(applied)
+                    # upward = float(upward)
+                    # downward = float(downward)
+
+                    # # Mean = (M1 + M2) / 2
+                    # mean = (upward + downward) / 2
+
+                    # # Deviation = A - M
+                    # deviation = applied - mean
+
+                    # result_form.instance.mean_value = mean
+                    # result_form.instance.deviation = deviation
+                    # Convert values to Decimal
+                    applied = Decimal(str(applied))
+                    upward = Decimal(str(upward))
+                    downward = Decimal(str(downward))
+
+                    # Mean = (M1 + M2) / 2
+                    mean = (upward + downward) / Decimal("2")
+
+                    # Deviation = A - M
+                    deviation = applied - mean
+
+                    # Keep 4 decimal places
+                    mean = mean.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+                    deviation = deviation.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
+                    result_form.instance.mean_value = mean
+                    result_form.instance.deviation = deviation
+
             result_formset.save()
 
             messages.success(
@@ -144,27 +185,37 @@ def certificate_detail(request, pk):
                 f"Certificate {certificate.number} updated."
             )
 
-            # Save and immediately open the printable certificate
             if "save_and_print" in request.POST:
                 return redirect(
                     "certificate_print",
                     pk=certificate.pk
                 )
 
-            # Normal save
             return redirect(
                 "job_detail",
                 pk=certificate.job_id
             )
+
     else:
-        cert_form = CertificateForm(instance=certificate)
-        result_formset = CalibrationResultFormSet(instance=certificate, prefix="results")
+        cert_form = CertificateForm(
+            instance=certificate
+        )
+
+        result_formset = ResultFormSet(
+            instance=certificate,
+            prefix="results"
+        )
 
     return render(
         request,
         "labmanager/certificate_detail.html",
-        {"certificate": certificate, "cert_form": cert_form, "result_formset": result_formset},
+        {
+            "certificate": certificate,
+            "cert_form": cert_form,
+            "result_formset": result_formset,
+        },
     )
+
 
 @login_required
 def certificate_print(request, pk):
@@ -244,3 +295,7 @@ def technician_toggle(request, pk):
     technician.is_active = not technician.is_active
     technician.save(update_fields=["is_active"])
     return redirect("technician_list")
+
+@login_required
+def uncertainty(request):
+    return render(request, "labmanager/uncertainty.html")
