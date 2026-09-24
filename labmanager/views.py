@@ -297,5 +297,25 @@ def technician_toggle(request, pk):
     return redirect("technician_list")
 
 @login_required
-def uncertainty(request):
-    return render(request, "labmanager/uncertainty.html")
+def uncertainty(request, pk):
+    certificate = get_object_or_404(
+        Certificate.objects.select_related(
+            "job",
+            "line_item",
+            "line_item__instrument",
+        ).prefetch_related("results"),
+        pk=pk,
+    )
+
+    if not _can_edit_certificate(request.user, certificate):
+        messages.error(request, "You do not have access to this certificate.")
+        return redirect("dashboard")
+
+    results = certificate.results.all()
+
+    return render(request,"labmanager/uncertainty.html",
+        {
+            "certificate": certificate,
+            "results": results,
+        },
+    )

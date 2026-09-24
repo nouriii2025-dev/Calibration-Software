@@ -16,5 +16,9 @@ urlpatterns = [
     path("technicians/", views.technician_list, name="technician_list"),
     path("technicians/<int:pk>/toggle/", views.technician_toggle, name="technician_toggle"),
     path("certificates/<int:pk>/print/",views.certificate_print,name="certificate_print",),
-    path("uncertainty/", views.uncertainty, name="uncertainty"),
+    path(
+    "uncertainty/<int:pk>/",
+    views.uncertainty,
+    name="uncertainty",
+),
 ]

@@ -11,11 +11,11 @@
         <div class="row">
             <div>
                 <label>Resolution</label>
-                <input type="number" step="any" id="resolution">
+                <input type="number" step="any" id="resolution" value="{{ certificate.device_resolution }}" readonly>
             </div>
             <div>
                 <label>Ratio</label>
-                <input type="number" step="any" id="ratio">
+                <input type="number" step="any" id="ratio" value="{{ certificate.device_ratio }}" readonly>
             </div>
             <div>
                 <label>Assumed Resolution</label>
@@ -63,7 +63,7 @@
     </div>
 
     <div class="card">
-        <h2>Calibration Points</h2>
+        <h2>Uncertainty Results</h2>
         <p class="muted">Enter the applied pressure and readings for each point. Mean, deviation, hysteresis and uncertainty values are calculated automatically.</p>
         <div class="table-scroll">
         <table class="line-items-table" id="calc-table">
@@ -87,7 +87,87 @@
                     <th></th>
                 </tr>
             </thead>
-            <tbody id="calc-body"></tbody>
+            <tbody id="calc-body">
+    {% for result in results %}
+    <tr class="line-item-row">
+
+        <td>
+            <input
+                type="number"
+                step="any"
+                data-f="applied"
+                value="{{ result.applied_value }}"
+                readonly
+            >
+        </td>
+
+        <td>
+            <input
+                type="number"
+                step="any"
+                data-f="m1"
+                value="{{ result.upward_reading }}"
+                readonly
+            >
+        </td>
+
+        <td>
+            <input
+                type="number"
+                step="any"
+                data-f="m2"
+                value="{{ result.downward_reading }}"
+                readonly
+            >
+        </td>
+
+        <td>
+            <input
+                type="number"
+                step="any"
+                data-f="mean"
+                value="{{ result.mean_value }}"
+                readonly
+            >
+        </td>
+
+        <td>
+            <input
+                type="number"
+                step="any"
+                data-f="dev"
+                value="{{ result.deviation }}"
+                readonly
+            >
+        </td>
+
+        <td class="calc-cell" data-o="rep">—</td>
+        <td class="calc-cell" data-o="hyst">—</td>
+        <td class="calc-cell" data-o="uhyst">—</td>
+        <td class="calc-cell" data-o="ures">—</td>
+
+        <td>
+            <input
+                type="number"
+                step="any"
+                data-f="ptx"
+                value=""
+            >
+        </td>
+
+        <td class="calc-cell strong" data-o="comb">—</td>
+        <td class="calc-cell strong" data-o="exp">—</td>
+        <td class="calc-cell strong" data-o="pct">—</td>
+        <td class="calc-cell" data-o="cmc">—</td>
+        <td class="calc-cell strong" data-o="max">—</td>
+
+        <td>
+            <button type="button" class="remove-row">✕</button>
+        </td>
+
+    </tr>
+    {% endfor %}
+</tbody>
         </table>
         </div>
         <button type="button" class="btn secondary small" id="add-point" style="margin-top:0.75rem;">+ Add calibration point</button>
@@ -163,8 +243,10 @@
     function calculate() {
         const assumed = num($('resolution').value) * num($('ratio').value);
         const fsd = num($('fullScale').value);
-        const k = num($('kFactor').value);
-        const conv = $('unit').value === 'bar' ? 1 : (num($('convFactor').value) || 1);
+        const unitSelect = $('unit');
+        const conv = parseFloat(
+            unitSelect.options[unitSelect.selectedIndex].dataset.factor
+        ) || 1;
         const ures = assumed / SQRT3;
 
         $('assumedRes').value = isFinite(assumed) ? +assumed.toFixed(6) : '—';
@@ -249,7 +331,7 @@
     $('btn-csv').addEventListener('click', exportCsv);
     $('btn-print').addEventListener('click', function () { window.print(); });
 
-    reset();
+    calculate();
 })();
 </script>
 {% endblock %}

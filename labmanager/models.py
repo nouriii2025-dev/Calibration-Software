@@ -102,10 +102,19 @@ class Certificate(models.Model):
     # --- Device under test ---
     device_serial = models.CharField(max_length=100, blank=True)
     device_manufacturer = models.CharField(max_length=150, blank=True)
-    device_resolution = models.CharField(max_length=100, blank=True)
+    device_resolution = models.DecimalField(
+        max_digits=20,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
     device_accuracy = models.CharField(max_length=100, blank=True)
-    device_ratio = models.CharField(max_length=100, blank=True)
-
+    device_ratio = models.DecimalField(
+        max_digits=20,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
     # --- Working standard used to calibrate it ---
     working_standard_name = models.CharField(max_length=150, blank=True)
     working_standard_serial = models.CharField(max_length=100, blank=True)
@@ -249,14 +258,24 @@ class JobLineItem(models.Model):
     def __str__(self):
         return f"{self.instrument} x{self.quantity} ({self.job.job_number})"
 
+    # @property
+    # def certificate_range(self):
+    #     certs = list(self.certificates.order_by("number"))
+    #     if not certs:
+    #         return "—"
+    #     if len(certs) == 1:
+    #         return certs[0].number
+    #     return f"{certs[0].number} – {certs[-1].number}"
     @property
     def certificate_range(self):
-        certs = list(self.certificates.order_by("number"))
-        if not certs:
+        numbers = list(
+            self.certificates.order_by("number").values_list("number", flat=True)
+        )
+        if not numbers:
             return "—"
-        if len(certs) == 1:
-            return certs[0].number
-        return f"{certs[0].number} – {certs[-1].number}"
+        if len(numbers) == 1:
+            return numbers[0]
+        return f"{numbers[0]} – {numbers[-1]}"
 
     def assign_certificates(self):
         """Assign the next available certificates to this line item
