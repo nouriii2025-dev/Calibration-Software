@@ -1,0 +1,42 @@
+{% extends "labmanager/base.html" %}
+{% block title %}Instruments{% endblock %}
+{% block content %}
+<h1>Instruments</h1>
+
+<div class="card">
+    <h2>Add Instrument</h2>
+    <form method="post">
+        {% csrf_token %}
+        <div class="row">
+            <div>
+                <label>Name</label>
+                {{ form.name }}
+            </div>
+        </div>
+        <button class="btn" style="margin-top:1rem;" type="submit">Add</button>
+    </form>
+</div>
+
+<div class="card">
+    <table>
+        <thead><tr><th>Name</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+            {% for instrument in instruments %}
+            <tr>
+                <td>{{ instrument.name }}</td>
+              
+                <td><span class="pill">{{ instrument.is_active|yesno:"Active,Inactive" }}</span></td>
+                <td>
+                    <form method="post" action="{% url 'instrument_toggle' instrument.pk %}">
+                        {% csrf_token %}
+                        <button class="btn secondary small" type="submit">{{ instrument.is_active|yesno:"Deactivate,Activate" }}</button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="muted">No instruments yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

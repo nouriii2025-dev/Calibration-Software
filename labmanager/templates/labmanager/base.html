@@ -1,0 +1,39 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Lab Job Manager{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'styles.css' %}">
+</head>
+<body>
+    <nav>
+        <a class="brand" href="{% url 'dashboard' %}">Lab Job Manager</a>
+        <div>
+            {% if user.is_authenticated %}
+                <a href="{% url 'dashboard' %}">Dashboard</a>
+                {% if user.is_lab_head %}
+                    <a href="{% url 'job_create' %}">New Job</a>
+                    <a href="{% url 'instrument_list' %}">Instruments</a>
+                    <a href="{% url 'technician_list' %}">Technicians</a>
+                {% endif %}
+                <a href="{% url 'logout' %}">Log out ({{ user.username }})</a>
+            {% else %}
+                <a href="{% url 'login' %}">Log in</a>
+                <a href="{% url 'signup' %}">Sign up</a>
+            {% endif %}
+        </div>
+    </nav>
+    <div class="container">
+        {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+                <li class="{{ message.tags }}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

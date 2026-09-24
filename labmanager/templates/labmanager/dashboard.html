@@ -1,0 +1,39 @@
+{% extends "labmanager/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;">
+    <h1>{% if user.is_lab_head %}All Jobs{% else %}My Assigned Jobs{% endif %}</h1>
+    {% if user.is_lab_head %}
+        <a class="btn" href="{% url 'job_create' %}">+ New Job</a>
+    {% endif %}
+</div>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Job Number</th>
+                <th>Customer</th>
+                <th>PO Number</th>
+                <th>Certificates</th>
+                <th>Committed Date</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for job in jobs %}
+            <tr>
+                <td>{{ job.job_number }}</td>
+                <td>{{ job.customer_name }}</td>
+                <td>{{ job.po_number }}</td>
+                <td><span class="pill">{{ job.certificates_assigned_count }}/{{ job.quantity }} assigned</span></td>
+                <td>{{ job.committed_date|default:"—" }}</td>
+                <td><a href="{% url 'job_detail' job.pk %}">View</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="muted">No jobs yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

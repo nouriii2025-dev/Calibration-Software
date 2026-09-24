@@ -1,0 +1,217 @@
+{% extends "labmanager/base.html" %}
+{% block title %}Certificate {{ certificate.number }}{% endblock %}
+{% block content %}
+<h1>Certificate {{ certificate.number }}</h1>
+<p class="muted">
+    Job <a href="{% url 'job_detail' certificate.job_id %}">{{ certificate.job.job_number }}</a>
+    &middot; {{ certificate.job.customer_name }}
+    {% if certificate.line_item %}&middot; {{ certificate.line_item.instrument }} &middot; assigned to {{ certificate.line_item.assigned_to }}{% endif %}
+</p>
+
+<form method="post">
+    {% csrf_token %}
+
+    <div class="card">
+        <h2>Device Under Test</h2>
+        <div class="row">
+            <div>
+                <label>Manufacturer</label>
+                {{ cert_form.device_manufacturer }}
+            </div>
+            <div>
+                <label>Serial Number</label>
+                {{ cert_form.device_serial }}
+            </div>
+        </div>
+        <div class="row">
+            <div>
+                <label>Resolution</label>
+                {{ cert_form.device_resolution }}
+            </div>
+            <div>
+                <label>Accuracy</label>
+                {{ cert_form.device_accuracy }}
+            </div>
+        </div>
+        <p class="muted">Model / range come from the instrument line item: {{ certificate.line_item.model|default:"—" }} / {{ certificate.line_item.range|default:"—" }}</p>
+    </div>
+
+    <div class="card">
+        <h2>Working Standard</h2>
+        <div class="row">
+            <div>
+                <label>Name</label>
+                {{ cert_form.working_standard_name }}
+            </div>
+            <div>
+                <label>Serial Number</label>
+                {{ cert_form.working_standard_serial }}
+            </div>
+            <div>
+                <label>Certificate No.</label>
+                {{ cert_form.working_standard_certificate_no }}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Calibration Conditions</h2>
+        <div class="row">
+            <div>
+                <label>Lab Temperature</label>
+                {{ cert_form.lab_temperature }}
+            </div>
+            <div>
+                <label>Lab Humidity</label>
+                {{ cert_form.lab_humidity }}
+            </div>
+            <div>
+                <label>Ambient Pressure</label>
+                {{ cert_form.ambient_pressure }}
+            </div>
+        </div>
+        <div class="row">
+            <div>
+                <label>Reference Procedure</label>
+                {{ cert_form.reference_procedure }}
+            </div>
+            <div>
+                <label>Temperature Variation</label>
+                {{ cert_form.temperature_variation }}
+            </div>
+        </div>
+        <label>Condition Notes</label>
+        {{ cert_form.condition_notes }}
+    </div>
+
+    <div class="card">
+    <h2>Calibration Results</h2>
+
+    {{ result_formset.management_form }}
+
+    <div style="overflow-x:auto;">
+        <table id="results-table">
+            <thead>
+                <tr>
+                    <th>Applied Pressure (A)<br>bar</th>
+                    <th>Upward<br>(M1)</th>
+                    <th>Downward<br>(M2)</th>
+                    <th>Mean Value<br>(M)</th>
+                    <th>Deviation<br>(A-M)</th>
+                    <th>Expanded Uncertainty<br>(% FS)</th>
+                    <th>Remarks<br>Pass / Fail</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+
+            <tbody id="results-body">
+                {% for form in result_formset %}
+                <tr class="result-row">
+                    <td>{{ form.applied_value }}</td>             
+                    <td>{{ form.upward_reading }}</td>             
+                    <td>{{ form.downward_reading }}</td>
+                    <td>{{ form.mean_value }}</td>
+                    <td>{{ form.deviation }}</td>
+                    <td>{{ form.uncertainty }}</td>
+                    <td>{{ form.remarks }}</td>
+                    <td><button type="button" class="remove-row">✕</button></td>
+
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <button type="button"
+            class="btn secondary small"
+            id="add-result"
+            style="margin-top:0.75rem;">
+        + Add result row
+    </button>
+</div>
+
+    <div class="card">
+        <h2>Sign-off</h2>
+        <div class="row">
+            <div>
+                <label>Calibration Date</label>
+                {{ cert_form.calibration_date }}
+            </div>
+            <div>
+                <label>Issue Date</label>
+                {{ cert_form.issue_date }}
+            </div>
+        </div>
+        <div class="row">
+            <div>
+                <label>Calibrated By</label>
+                {{ cert_form.calibrated_by }}
+            </div>
+            <div>
+                <label>Approved Signatory</label>
+                {{ cert_form.approved_signatory }}
+            </div>
+        </div>
+    </div>
+
+    <button type="submit" class="btn">Save Certificate</button>
+
+
+     <button type="submit" name="save_and_print" class="btn secondary">
+        Save & Print Certificate
+    </button>
+
+    {% if certificate.calibration_date or certificate.results.exists %}
+        <a
+            href="{% url 'certificate_print' certificate.pk %}"
+            target="_blank"
+            class="btn secondary"
+        >
+            Print Certificate
+        </a>
+    {% endif %}
+
+</form>
+
+<table style="display:none;">
+    <tbody id="result-empty-row">
+        <tr class="result-row">
+            <td>{{ result_formset.empty_form.applied_value }}</td>
+            <td>{{ result_formset.empty_form.upward_reading }}</td>
+            <td>{{ result_formset.empty_form.downward_reading }}</td>
+            <td>{{ result_formset.empty_form.mean_value }}</td>
+            <td>{{ result_formset.empty_form.deviation }}</td>
+            <td>{{ result_formset.empty_form.uncertainty }}</td>
+            <td>{{ result_formset.empty_form.remarks }}</td>
+            <td>
+                <button type="button" class="remove-row">✕</button>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<script>
+(function () {
+    const addBtn = document.getElementById('add-result');
+    const body = document.getElementById('results-body');
+    const totalForms = document.querySelector('#id_results-TOTAL_FORMS');
+
+    addBtn.addEventListener('click', function () {
+        const idx = parseInt(totalForms.value, 10);
+        const emptyRow = document.getElementById('result-empty-row').querySelector('tr').cloneNode(true);
+        emptyRow.innerHTML = emptyRow.innerHTML.replace(/__prefix__/g, idx);
+        body.appendChild(emptyRow);
+        totalForms.value = idx + 1;
+        emptyRow.querySelector('.remove-row').addEventListener('click', function () {
+            emptyRow.remove();
+        });
+    });
+
+    body.querySelectorAll('.remove-row').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            btn.closest('tr').remove();
+        });
+    });
+})();
+</script>
+{% endblock %}

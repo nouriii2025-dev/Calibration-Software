@@ -1,0 +1,59 @@
+{% extends "labmanager/base.html" %}
+{% block title %}Technicians{% endblock %}
+{% block content %}
+<h1>Technicians</h1>
+
+<div class="card">
+    <h2>Add Technician</h2>
+    <form method="post">
+        {% csrf_token %}
+        <div class="row">
+            <div>
+                <label>First name</label>
+                {{ form.first_name }}
+            </div>
+            <div>
+                <label>Last name</label>
+                {{ form.last_name }}
+            </div>
+        </div>
+        <div class="row">
+            <div>
+                <label>Username</label>
+                {{ form.username }}
+            </div>
+            <div>
+                <label>Password</label>
+                {{ form.password }}
+            </div>
+        </div>
+        {% for field in form %}
+            {% for error in field.errors %}<p style="color:#b3261e;font-size:0.82rem;">{{ field.label }}: {{ error }}</p>{% endfor %}
+        {% endfor %}
+        <button class="btn" style="margin-top:1rem;" type="submit">Add</button>
+    </form>
+</div>
+
+<div class="card">
+    <table>
+        <thead><tr><th>Name</th><th>Username</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+            {% for tech in technicians %}
+            <tr>
+                <td>{{ tech.get_full_name|default:"—" }}</td>
+                <td>{{ tech.username }}</td>
+                <td><span class="pill">{{ tech.is_active|yesno:"Active,Inactive" }}</span></td>
+                <td>
+                    <form method="post" action="{% url 'technician_toggle' tech.pk %}">
+                        {% csrf_token %}
+                        <button class="btn secondary small" type="submit">{{ tech.is_active|yesno:"Deactivate,Activate" }}</button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="muted">No technicians yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

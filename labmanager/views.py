@@ -1,0 +1,246 @@
+from django.contrib import messages
+from django.contrib.auth import login as auth_login
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.views import LoginView
+from django.db import transaction
+from django.shortcuts import get_object_or_404, redirect, render
+
+from .forms import (
+    CalibrationResultFormSet,
+    CertificateForm,
+    InstrumentForm,
+    JobDocumentFormSet,
+    JobForm,
+    JobLineItemFormSet,
+    SignUpForm,
+    TechnicianForm,
+)
+from .models import Certificate, Instrument, Job, User
+
+
+def is_lab_head(user):
+    return user.is_authenticated and user.is_lab_head
+
+
+# ---------- Auth ----------
+
+def signup_view(request):
+    if request.method == "POST":
+        form = SignUpForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            auth_login(request, user)
+            return redirect("dashboard")
+    else:
+        form = SignUpForm()
+    return render(request, "labmanager/signup.html", {"form": form})
+
+
+class RoleAwareLoginView(LoginView):
+    template_name = "labmanager/login.html"
+
+
+# ---------- Dashboard ----------
+
+@login_required
+def dashboard(request):
+    if request.user.is_lab_head:
+        jobs = Job.objects.all()
+    else:
+        jobs = Job.objects.filter(line_items__assigned_to=request.user).distinct()
+    return render(request, "labmanager/dashboard.html", {"jobs": jobs})
+
+
+@login_required
+@user_passes_test(is_lab_head)
+def job_create(request):
+    if request.method == "POST":
+        job_form = JobForm(request.POST)
+        # Validate against an unsaved placeholder instance first, so nothing
+        # touches the database unless the whole form is valid.
+        line_item_formset = JobLineItemFormSet(request.POST, instance=Job(), prefix="line_items")
+        doc_formset = JobDocumentFormSet(request.POST, request.FILES, instance=Job(), prefix="documents")
+
+        if job_form.is_valid() and line_item_formset.is_valid() and doc_formset.is_valid():
+            with transaction.atomic():
+                job = job_form.save(commit=False)
+                job.created_by = request.user
+                job.save()
+
+                # Generate the fixed pool of certificates for this job's quantity.
+                for _ in range(job.quantity):
+                    Certificate.objects.create(job=job)
+
+                line_item_formset.instance = job
+                doc_formset.instance = job
+                line_items = line_item_formset.save()
+                for li in line_items:
+                    li.assign_certificates()
+                doc_formset.save()
+
+            messages.success(request, f"Job {job.job_number} created with {job.quantity} certificates.")
+            return redirect("job_detail", pk=job.pk)
+    else:
+        job_form = JobForm()
+        line_item_formset = JobLineItemFormSet(prefix="line_items")
+        doc_formset = JobDocumentFormSet(prefix="documents")
+
+    next_job_number = Job.generate_job_number()
+    return render(
+        request,
+        "labmanager/job_form.html",
+        {
+            "job_form": job_form,
+            "line_item_formset": line_item_formset,
+            "doc_formset": doc_formset,
+            "next_job_number": next_job_number,
+        },
+    )
+
+
+@login_required
+def job_detail(request, pk):
+    job = get_object_or_404(Job, pk=pk)
+    if not request.user.is_lab_head and not job.line_items.filter(assigned_to=request.user).exists():
+        messages.error(request, "You do not have access to that job.")
+        return redirect("dashboard")
+    return render(request, "labmanager/job_detail.html", {"job": job})
+
+
+# ---------- Certificates ----------
+
+def _can_edit_certificate(user, certificate):
+    if user.is_lab_head:
+        return True
+    return bool(certificate.line_item and certificate.line_item.assigned_to_id == user.id)
+
+
+@login_required
+def certificate_detail(request, pk):
+    certificate = get_object_or_404(Certificate, pk=pk)
+    if not _can_edit_certificate(request.user, certificate):
+        messages.error(request, "You do not have access to that certificate.")
+        return redirect("dashboard")
+
+    if request.method == "POST":
+        cert_form = CertificateForm(
+            request.POST,
+            instance=certificate
+        )
+
+        result_formset = CalibrationResultFormSet(
+            request.POST,
+            instance=certificate,
+            prefix="results"
+        )
+
+        if cert_form.is_valid() and result_formset.is_valid():
+
+            cert_form.save()
+            result_formset.save()
+
+            messages.success(
+                request,
+                f"Certificate {certificate.number} updated."
+            )
+
+            # Save and immediately open the printable certificate
+            if "save_and_print" in request.POST:
+                return redirect(
+                    "certificate_print",
+                    pk=certificate.pk
+                )
+
+            # Normal save
+            return redirect(
+                "job_detail",
+                pk=certificate.job_id
+            )
+    else:
+        cert_form = CertificateForm(instance=certificate)
+        result_formset = CalibrationResultFormSet(instance=certificate, prefix="results")
+
+    return render(
+        request,
+        "labmanager/certificate_detail.html",
+        {"certificate": certificate, "cert_form": cert_form, "result_formset": result_formset},
+    )
+
+@login_required
+def certificate_print(request, pk):
+    certificate = get_object_or_404(
+        Certificate.objects.select_related(
+            "job",
+            "line_item",
+            "line_item__instrument",
+        ).prefetch_related("results"),
+        pk=pk,
+    )
+
+    if not _can_edit_certificate(request.user, certificate):
+        messages.error(
+            request,
+            "You do not have access to that certificate."
+        )
+        return redirect("dashboard")
+
+    return render(
+        request,
+        "labmanager/certificate_print.html",
+        {
+            "certificate": certificate,
+            "results": certificate.results.all(),
+        },
+    )
+
+
+# ---------- Instruments ----------
+
+@login_required
+@user_passes_test(is_lab_head)
+def instrument_list(request):
+    if request.method == "POST":
+        form = InstrumentForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Instrument added.")
+            return redirect("instrument_list")
+    else:
+        form = InstrumentForm()
+    instruments = Instrument.objects.all()
+    return render(request, "labmanager/instruments.html", {"form": form, "instruments": instruments})
+
+
+@login_required
+@user_passes_test(is_lab_head)
+def instrument_toggle(request, pk):
+    instrument = get_object_or_404(Instrument, pk=pk)
+    instrument.is_active = not instrument.is_active
+    instrument.save(update_fields=["is_active"])
+    return redirect("instrument_list")
+
+
+# ---------- Technicians ----------
+
+@login_required
+@user_passes_test(is_lab_head)
+def technician_list(request):
+    if request.method == "POST":
+        form = TechnicianForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Technician added.")
+            return redirect("technician_list")
+    else:
+        form = TechnicianForm()
+    technicians = User.objects.filter(role=User.Role.TECHNICIAN)
+    return render(request, "labmanager/technicians.html", {"form": form, "technicians": technicians})
+
+
+@login_required
+@user_passes_test(is_lab_head)
+def technician_toggle(request, pk):
+    technician = get_object_or_404(User, pk=pk, role=User.Role.TECHNICIAN)
+    technician.is_active = not technician.is_active
+    technician.save(update_fields=["is_active"])
+    return redirect("technician_list")
