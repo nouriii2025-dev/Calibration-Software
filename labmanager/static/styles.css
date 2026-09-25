@@ -602,3 +602,12 @@
   .unc-table td.is-input input { min-width: 0; padding: 0; font-size: 9px; }
 }
 
+.readonly-value {
+    min-height: 38px;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #d9dde3;
+    border-radius: 6px;
+    background: #f6f7f9;
+    font-variant-numeric: tabular-nums;
+}
+

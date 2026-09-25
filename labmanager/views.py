@@ -5,7 +5,7 @@ from django.contrib.auth.views import LoginView
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from decimal import Decimal, ROUND_HALF_UP
-
+import math
 from .forms import *
 from .models import *
 
@@ -107,6 +107,114 @@ def _can_edit_certificate(user, certificate):
     return bool(certificate.line_item and certificate.line_item.assigned_to_id == user.id)
 
 
+# @login_required
+# def certificate_detail(request, pk):
+#     certificate = get_object_or_404(
+#         Certificate.objects.select_related("line_item"),
+#         pk=pk
+#     )
+
+#     if not _can_edit_certificate(request.user, certificate):
+#         messages.error(request, "You do not have access to that certificate.")
+#         return redirect("dashboard")
+
+#     ResultFormSet = get_calibration_result_formset(certificate)
+
+#     if request.method == "POST":
+#         cert_form = CertificateForm(
+#             request.POST,
+#             instance=certificate
+#         )
+
+#         result_formset = ResultFormSet(
+#             request.POST,
+#             instance=certificate,
+#             prefix="results"
+#         )
+
+#         if cert_form.is_valid() and result_formset.is_valid():
+
+#             cert_form.save()
+
+#             # Calculate Mean and Deviation before saving results
+#             for result_form in result_formset:
+#                 if result_form.cleaned_data.get("DELETE"):
+#                     continue
+
+#                 applied = result_form.cleaned_data.get("applied_value")
+#                 upward = result_form.cleaned_data.get("upward_reading")
+#                 downward = result_form.cleaned_data.get("downward_reading")
+
+#                 if applied is not None and upward is not None and downward is not None:
+
+#                     # Convert form values to numbers
+#                     # applied = float(applied)
+#                     # upward = float(upward)
+#                     # downward = float(downward)
+
+#                     # # Mean = (M1 + M2) / 2
+#                     # mean = (upward + downward) / 2
+
+#                     # # Deviation = A - M
+#                     # deviation = applied - mean
+
+#                     # result_form.instance.mean_value = mean
+#                     # result_form.instance.deviation = deviation
+#                     # Convert values to Decimal
+#                     applied = Decimal(str(applied))
+#                     upward = Decimal(str(upward))
+#                     downward = Decimal(str(downward))
+
+#                     # Mean = (M1 + M2) / 2
+#                     mean = (upward + downward) / Decimal("2")
+
+#                     # Deviation = A - M
+#                     deviation = applied - mean
+
+#                     # Keep 4 decimal places
+#                     mean = mean.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+#                     deviation = deviation.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
+#                     result_form.instance.mean_value = mean
+#                     result_form.instance.deviation = deviation
+
+#             result_formset.save()
+
+#             messages.success(
+#                 request,
+#                 f"Certificate {certificate.number} updated."
+#             )
+
+#             if "save_and_print" in request.POST:
+#                 return redirect(
+#                     "certificate_print",
+#                     pk=certificate.pk
+#                 )
+
+#             return redirect(
+#                 "job_detail",
+#                 pk=certificate.job_id
+#             )
+
+#     else:
+#         cert_form = CertificateForm(
+#             instance=certificate
+#         )
+
+#         result_formset = ResultFormSet(
+#             instance=certificate,
+#             prefix="results"
+#         )
+
+#     return render(
+#         request,
+#         "labmanager/certificate_detail.html",
+#         {
+#             "certificate": certificate,
+#             "cert_form": cert_form,
+#             "result_formset": result_formset,
+#         },
+#     )
 @login_required
 def certificate_detail(request, pk):
     certificate = get_object_or_404(
@@ -134,9 +242,14 @@ def certificate_detail(request, pk):
 
         if cert_form.is_valid() and result_formset.is_valid():
 
+            # ---------------------------------------------------------
+            # Save certificate
+            # ---------------------------------------------------------
             cert_form.save()
 
+            # ---------------------------------------------------------
             # Calculate Mean and Deviation before saving results
+            # ---------------------------------------------------------
             for result_form in result_formset:
                 if result_form.cleaned_data.get("DELETE"):
                     continue
@@ -145,41 +258,45 @@ def certificate_detail(request, pk):
                 upward = result_form.cleaned_data.get("upward_reading")
                 downward = result_form.cleaned_data.get("downward_reading")
 
-                if applied is not None and upward is not None and downward is not None:
-
-                    # Convert form values to numbers
-                    # applied = float(applied)
-                    # upward = float(upward)
-                    # downward = float(downward)
-
-                    # # Mean = (M1 + M2) / 2
-                    # mean = (upward + downward) / 2
-
-                    # # Deviation = A - M
-                    # deviation = applied - mean
-
-                    # result_form.instance.mean_value = mean
-                    # result_form.instance.deviation = deviation
-                    # Convert values to Decimal
+                if (
+                    applied is not None
+                    and upward is not None
+                    and downward is not None
+                ):
                     applied = Decimal(str(applied))
                     upward = Decimal(str(upward))
                     downward = Decimal(str(downward))
 
-                    # Mean = (M1 + M2) / 2
                     mean = (upward + downward) / Decimal("2")
-
-                    # Deviation = A - M
                     deviation = applied - mean
 
-                    # Keep 4 decimal places
-                    mean = mean.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-                    deviation = deviation.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+                    mean = mean.quantize(
+                        Decimal("0.0001"),
+                        rounding=ROUND_HALF_UP
+                    )
+
+                    deviation = deviation.quantize(
+                        Decimal("0.0001"),
+                        rounding=ROUND_HALF_UP
+                    )
 
                     result_form.instance.mean_value = mean
                     result_form.instance.deviation = deviation
 
             result_formset.save()
 
+            # ---------------------------------------------------------
+            # Uncertainty Calculation button
+            # ---------------------------------------------------------
+            if "calculate_uncertainty" in request.POST:
+                return redirect(
+                    "uncertainty",
+                    pk=certificate.pk
+                )
+
+            # ---------------------------------------------------------
+            # Normal Save Certificate
+            # ---------------------------------------------------------
             messages.success(
                 request,
                 f"Certificate {certificate.number} updated."
@@ -215,7 +332,6 @@ def certificate_detail(request, pk):
             "result_formset": result_formset,
         },
     )
-
 
 @login_required
 def certificate_print(request, pk):
@@ -296,8 +412,157 @@ def technician_toggle(request, pk):
     technician.save(update_fields=["is_active"])
     return redirect("technician_list")
 
+# @login_required
+# def uncertainty(request, pk):
+#     certificate = get_object_or_404(
+#         Certificate.objects.select_related(
+#             "job",
+#             "line_item",
+#             "line_item__instrument",
+#         ).prefetch_related("results"),
+#         pk=pk,
+#     )
+
+#     if not _can_edit_certificate(request.user, certificate):
+#         messages.error(request, "You do not have access to this certificate.")
+#         return redirect("dashboard")
+
+#     results = certificate.results.all()
+
+#     return render(request,"labmanager/uncertainty.html",
+#         {
+#             "certificate": certificate,
+#             "results": results,
+#         },
+#     )
+
+
+# ================================================================
+# UNCERTAINTY / CMC HELPERS
+# ================================================================
+
+CMC_TABLE = {
+    "Pneumatic": [
+        (Decimal("-0.95"), Decimal("0"), Decimal("0.10")),
+        (Decimal("0"), Decimal("30"), Decimal("0.080")),
+        (Decimal("30"), Decimal("100"), Decimal("0.020")),
+    ],
+    "Hydraulic": [
+        (Decimal("0"), Decimal("0.6"), Decimal("0.080")),
+        (Decimal("6"), Decimal("60"), Decimal("0.020")),
+        (Decimal("60"), Decimal("1000"), Decimal("0.025")),
+    ],
+}
+
+
+UNIT_TO_BAR = {
+    "bar": Decimal("1"),
+    "psi": Decimal("1") / Decimal("14.5038"),
+    "kpa": Decimal("1") / Decimal("100"),
+    "mpa": Decimal("10"),
+    "kg/cm2": Decimal("1") / Decimal("1.01972"),
+    "kgf/cm²": Decimal("1") / Decimal("1.01972"),
+}
+
+
+def convert_to_bar(value, unit):
+    """
+    Convert a pressure value from the UUC unit to bar.
+    """
+
+    if value is None:
+        return None
+
+    try:
+        value = Decimal(str(value))
+    except Exception:
+        return None
+
+    unit_key = (unit or "bar").strip().lower()
+
+    factor = UNIT_TO_BAR.get(unit_key)
+
+    if factor is None:
+        return None
+
+    return value * factor
+
+
+def get_cmc(applied_pressure, uuc_unit, pressure_media):
+    """
+    Determine CMC percentage from the APPLIED PRESSURE.
+
+    The CMC table is defined in bar, so the applied pressure
+    is first converted to bar.
+    """
+
+    applied_bar = convert_to_bar(
+        applied_pressure,
+        uuc_unit,
+    )
+
+    if applied_bar is None:
+        return None
+
+    media = (pressure_media or "").strip()
+
+    ranges = CMC_TABLE.get(media, [])
+
+    for minimum, maximum, cmc in ranges:
+        if minimum <= applied_bar <= maximum:
+            return cmc
+
+    return None
+
+
+# @login_required
+# def uncertainty(request, pk):
+#     certificate = get_object_or_404(
+#         Certificate.objects.select_related(
+#             "job",
+#             "line_item",
+#             "line_item__instrument",
+#         ).prefetch_related("results"),
+#         pk=pk,
+#     )
+
+#     if not _can_edit_certificate(request.user, certificate):
+#         messages.error(
+#             request,
+#             "You do not have access to this certificate."
+#         )
+#         return redirect("dashboard")
+
+#     results = certificate.results.all()
+
+#     # ---------------------------------------------------------
+#     # Assumed Resolution
+#     #
+#     # Assumed Resolution = Resolution × Ratio
+#     # ---------------------------------------------------------
+#     assumed_resolution = None
+
+#     if (
+#         certificate.device_resolution is not None
+#         and certificate.device_ratio is not None
+#     ):
+#         assumed_resolution = (
+#             certificate.device_resolution
+#             * certificate.device_ratio
+#         )
+
+#     return render(
+#         request,
+#         "labmanager/uncertainty.html",
+#         {
+#             "certificate": certificate,
+#             "results": results,
+#             "assumed_resolution": assumed_resolution,
+#         },
+#     )
 @login_required
 def uncertainty(request, pk):
+
     certificate = get_object_or_404(
         Certificate.objects.select_related(
             "job",
@@ -308,14 +573,48 @@ def uncertainty(request, pk):
     )
 
     if not _can_edit_certificate(request.user, certificate):
-        messages.error(request, "You do not have access to this certificate.")
+        messages.error(
+            request,
+            "You do not have access to this certificate."
+        )
         return redirect("dashboard")
 
-    results = certificate.results.all()
+    # -------------------------------------------------------------
+    # Make sure certificate inherits current Line Item range/unit
+    # -------------------------------------------------------------
 
-    return render(request,"labmanager/uncertainty.html",
+    if certificate.line_item:
+
+        changed_fields = []
+
+        line_item = certificate.line_item
+
+        if (
+            line_item.range_to is not None
+            and certificate.uuc_full_scale != line_item.range_to
+        ):
+            certificate.uuc_full_scale = line_item.range_to
+            changed_fields.append("uuc_full_scale")
+
+        if (
+            line_item.unit
+            and certificate.uuc_unit != line_item.unit
+        ):
+            certificate.uuc_unit = line_item.unit
+            changed_fields.append("uuc_unit")
+
+        if changed_fields:
+            certificate.save(update_fields=changed_fields)
+
+    assumed_resolution = certificate.assumed_resolution
+
+
+    return render(
+        request,
+        "labmanager/uncertainty.html",
         {
             "certificate": certificate,
-            "results": results,
+            "results": certificate.results.all(),
+            "assumed_resolution": assumed_resolution,
         },
     )

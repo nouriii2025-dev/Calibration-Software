@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.models import Max
 from django.utils import timezone
+from decimal import Decimal
 
 
 class User(AbstractUser):
@@ -89,40 +90,162 @@ class Job(models.Model):
         return self.quantity - self.certificates_assigned_count
 
 
+# class Certificate(models.Model):
+#     """One certificate slot generated for a Job. `number` follows the
+#     AF-###### sequential format and is fixed once generated."""
+
+#     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="certificates")
+#     number = models.CharField(max_length=20, unique=True, editable=False)
+#     line_item = models.ForeignKey(
+#         "JobLineItem", on_delete=models.SET_NULL, null=True, blank=True, related_name="certificates"
+#     )
+
+#     # --- Device under test ---
+#     device_serial = models.CharField(max_length=100, blank=True)
+#     device_manufacturer = models.CharField(max_length=150, blank=True)
+#     device_resolution = models.DecimalField(
+#         max_digits=20,
+#         decimal_places=3,
+#         null=True,
+#         blank=True,
+#     )
+#     device_accuracy = models.CharField(max_length=100, blank=True)
+#     device_ratio = models.DecimalField(
+#         max_digits=20,
+#         decimal_places=3,
+#         null=True,
+#         blank=True,
+#     )
+
+#     reference_instrument_range = models.DecimalField(
+#     max_digits=20,
+#     decimal_places=4,
+#     null=True,
+#     blank=True,
+#     )
+
+#     uuc_full_scale = models.DecimalField(
+#         max_digits=20,
+#         decimal_places=4,
+#         null=True,
+#         blank=True,
+#     )
+
+#     uuc_unit = models.CharField(
+#         max_length=20,
+#         blank=True,
+#     )
+
+#     pressure_media = models.CharField(
+#         max_length=30,
+#         blank=True,
+#     )
+#     # --- Working standard used to calibrate it ---
+#     working_standard_name = models.CharField(max_length=150, blank=True)
+#     working_standard_serial = models.CharField(max_length=100, blank=True)
+#     working_standard_certificate_no = models.CharField(max_length=100, blank=True)
+
+#     # --- Calibration conditions ---
+#     lab_temperature = models.CharField(max_length=50, blank=True, help_text="e.g. 23 \u00b1 2 \u00b0C")
+#     lab_humidity = models.CharField(max_length=50, blank=True, help_text="e.g. 45 \u00b1 10 %RH")
+#     ambient_pressure = models.CharField(max_length=50, blank=True)
+#     reference_procedure = models.CharField(max_length=150, blank=True)
+#     temperature_variation = models.CharField(max_length=50, blank=True)
+#     condition_notes = models.TextField(blank=True)
+
+#     # --- Sign-off ---
+#     calibration_date = models.DateField(null=True, blank=True)
+#     issue_date = models.DateField(null=True, blank=True)
+#     calibrated_by = models.CharField(max_length=150, blank=True)
+#     approved_signatory = models.CharField(max_length=150, blank=True)
+
+#     class Meta:
+#         ordering = ["number"]
+
+#     def __str__(self):
+#         return self.number
+
+#     @staticmethod
+#     def generate_number():
+#         last = Certificate.objects.aggregate(Max("number")).get("number__max")
+#         seq = int(last.split("-")[1]) + 1 if last else 116444
+#         return f"AF-{seq}"
+
+#     def save(self, *args, **kwargs):
+#         if not self.number:
+#             self.number = self.generate_number()
+#         super().save(*args, **kwargs)
+
+#     @property
+#     def is_complete(self):
+#         """Whether the calibration detail has been filled in, for a quick
+#         status indicator on the job detail page."""
+#         return bool(self.calibration_date and self.calibrated_by and self.results.exists())
 class Certificate(models.Model):
-    """One certificate slot generated for a Job. `number` follows the
-    AF-###### sequential format and is fixed once generated."""
+    """One certificate slot generated for a Job."""
 
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="certificates")
     number = models.CharField(max_length=20, unique=True, editable=False)
     line_item = models.ForeignKey(
-        "JobLineItem", on_delete=models.SET_NULL, null=True, blank=True, related_name="certificates"
+        "JobLineItem",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="certificates"
     )
 
     # --- Device under test ---
     device_serial = models.CharField(max_length=100, blank=True)
     device_manufacturer = models.CharField(max_length=150, blank=True)
+
     device_resolution = models.DecimalField(
         max_digits=20,
-        decimal_places=3,
+        decimal_places=2,
         null=True,
         blank=True,
     )
+
     device_accuracy = models.CharField(max_length=100, blank=True)
+
     device_ratio = models.DecimalField(
         max_digits=20,
-        decimal_places=3,
+        decimal_places=2,
         null=True,
         blank=True,
     )
-    # --- Working standard used to calibrate it ---
+
+    reference_instrument_range = models.DecimalField(
+        max_digits=20,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+
+    uuc_full_scale = models.DecimalField(
+        max_digits=20,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+
+    uuc_unit = models.CharField(
+        max_length=20,
+        blank=True,
+    )
+
+    pressure_media = models.CharField(
+        max_length=30,
+        blank=True,
+    )
+
+    # --- Working standard ---
     working_standard_name = models.CharField(max_length=150, blank=True)
     working_standard_serial = models.CharField(max_length=100, blank=True)
     working_standard_certificate_no = models.CharField(max_length=100, blank=True)
 
     # --- Calibration conditions ---
-    lab_temperature = models.CharField(max_length=50, blank=True, help_text="e.g. 23 \u00b1 2 \u00b0C")
-    lab_humidity = models.CharField(max_length=50, blank=True, help_text="e.g. 45 \u00b1 10 %RH")
+    lab_temperature = models.CharField(max_length=50, blank=True)
+    lab_humidity = models.CharField(max_length=50, blank=True)
     ambient_pressure = models.CharField(max_length=50, blank=True)
     reference_procedure = models.CharField(max_length=150, blank=True)
     temperature_variation = models.CharField(max_length=50, blank=True)
@@ -149,13 +272,79 @@ class Certificate(models.Model):
     def save(self, *args, **kwargs):
         if not self.number:
             self.number = self.generate_number()
+
+        # ---------------------------------------------------------
+        # Automatically derive UUC full scale from Job Line Item
+        # ---------------------------------------------------------
+        if self.line_item_id:
+            if self.line_item.range_to is not None:
+                self.uuc_full_scale = self.line_item.range_to
+
+            if self.line_item.unit:
+                self.uuc_unit = self.line_item.unit
+
+            if self.line_item.job_id:
+                pass
+
         super().save(*args, **kwargs)
 
     @property
     def is_complete(self):
-        """Whether the calibration detail has been filled in, for a quick
-        status indicator on the job detail page."""
-        return bool(self.calibration_date and self.calibrated_by and self.results.exists())
+        return bool(
+            self.calibration_date
+            and self.calibrated_by
+            and self.results.exists()
+        )
+
+    # -------------------------------------------------------------
+    # Pressure conversion helpers
+    # -------------------------------------------------------------
+
+    @property
+    def uuc_full_scale_bar(self):
+        """
+        Convert UUC full scale from its selected unit to bar.
+
+        CMC ranges are defined in bar, so CMC selection always
+        uses this value.
+        """
+
+        if self.uuc_full_scale is None:
+            return None
+
+        unit = (self.uuc_unit or "bar").strip().lower()
+
+        value = Decimal(str(self.uuc_full_scale))
+
+        conversions_to_bar = {
+            "bar": Decimal("1"),
+            "psi": Decimal("1") / Decimal("14.5038"),
+            "kpa": Decimal("1") / Decimal("100"),
+            "mpa": Decimal("10"),
+            "kg/cm2": Decimal("1") / Decimal("1.01972"),
+            "kgf/cm²": Decimal("1") / Decimal("1.01972"),
+        }
+
+        factor = conversions_to_bar.get(unit)
+
+        if factor is None:
+            return None
+
+        return value * factor
+
+    @property
+    def assumed_resolution(self):
+        """
+        Assumed Resolution = Resolution × Ratio
+        """
+
+        if self.device_resolution is None:
+            return None
+
+        if self.device_ratio is None:
+            return None
+
+        return self.device_resolution * self.device_ratio
 
 
 class CalibrationResult(models.Model):
@@ -202,6 +391,32 @@ class CalibrationResult(models.Model):
         verbose_name="Deviation (A-M)",
     )
 
+    # --- Uncertainty / Instrument Setup ---
+
+    reference_instrument_range = models.DecimalField(
+        max_digits=20,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+
+    uuc_full_scale = models.DecimalField(
+        max_digits=20,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+
+    uuc_unit = models.CharField(
+        max_length=20,
+        blank=True,
+    )
+
+    pressure_media = models.CharField(
+        max_length=30,
+        blank=True,
+    )
+
     # Expanded uncertainty
     uncertainty = models.CharField(
         max_length=50,
@@ -246,8 +461,8 @@ class JobLineItem(models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="line_items")
     instrument = models.ForeignKey(Instrument, on_delete=models.PROTECT, related_name="line_items")
     model = models.CharField(max_length=150, blank=True)
-    range_from = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
-    range_to = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    range_from = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    range_to = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     unit = models.CharField(max_length=50, blank=True, null=True, choices=UNIT_CHOICES)
     quantity = models.PositiveIntegerField(default=1)
     assigned_to = models.ForeignKey(User, on_delete=models.PROTECT,  related_name="assigned_line_items", limit_choices_to={"role": User.Role.TECHNICIAN},)
@@ -278,9 +493,15 @@ class JobLineItem(models.Model):
         return f"{numbers[0]} – {numbers[-1]}"
 
     def assign_certificates(self):
-        """Assign the next available certificates to this line item
-        and copy the selected reference procedure to each certificate.
         """
+        Assign the next available certificates to this line item.
+
+        The certificate automatically inherits:
+        - reference procedure
+        - UUC full scale
+        - UUC unit
+        """
+
         available = (
             self.job.certificates
             .filter(line_item__isnull=True)
@@ -291,9 +512,18 @@ class JobLineItem(models.Model):
             cert.line_item = self
             cert.reference_procedure = self.reference_procedure
 
+            # ---------------------------------------------------------
+            # Automatically derive UUC setup from Job Line Item
+            # ---------------------------------------------------------
+
+            cert.uuc_full_scale = self.range_to
+            cert.uuc_unit = self.unit or ""
+
             cert.save(update_fields=[
                 "line_item",
                 "reference_procedure",
+                "uuc_full_scale",
+                "uuc_unit",
             ])
 
 
