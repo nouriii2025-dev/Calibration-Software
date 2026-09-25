@@ -43,15 +43,6 @@
             </div>
         </div>
         <div class="row">
-            <!-- <div>
-                <label>Conversion from bar</label>
-                <input type="number" step="any" id="convFactor">
-                <p class="muted">Applied to "Std. Un. for Press Tx" only when the unit is not bar</p>
-            </div>
-            <div>
-                <label>Coverage Factor (k)</label>
-                <input type="number" step="any" id="kFactor">
-            </div> -->
             <div>
                 <label>Pressure Media</label>
                 <select id="media">
@@ -146,14 +137,15 @@
         <td class="calc-cell" data-o="uhyst">—</td>
         <td class="calc-cell" data-o="ures">—</td>
 
-        <td>
+        <!-- <td>
             <input
                 type="number"
                 step="any"
                 data-f="ptx"
                 value=""
             >
-        </td>
+        </td> -->
+        <td class="calc-cell" data-o="ptx">—</td>
 
         <td class="calc-cell strong" data-o="comb">—</td>
         <td class="calc-cell strong" data-o="exp">—</td>
@@ -207,131 +199,662 @@
 <script>
 (function () {
     const SQRT3 = Math.sqrt(3);
+    const K_FACTOR = 2;
 
     const $ = (id) => document.getElementById(id);
     const body = $('calc-body');
 
-    const num = (v) => { const n = parseFloat(v); return isFinite(n) ? n : NaN; };
-    const fmt = (n, d) => isFinite(n) ? n.toFixed(d) : '—';
+    const num = (v) => {
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? n : NaN;
+    };
+
+    const fmt = (n, d = 4) => {
+        return Number.isFinite(n) ? n.toFixed(d) : '—';
+    };
+
+    /*
+     * CMC values are percentages of FSD.
+     *
+     * Pneumatic:
+     * -0.95 to 0 bar       = 0.10 %
+     * 0 to 30 bar          = 0.080 %
+     * 30 to 100 bar        = 0.020 %
+     *
+     * Hydraulic:
+     * 0 to 0.6 bar         = 0.080 %
+     * 6 to 60 bar          = 0.020 %
+     * 60 to 1000 bar       = 0.025 %
+     */
+    function getCMC(media, range) {
+        if (!Number.isFinite(range)) {
+            return NaN;
+        }
+
+        if (media === 'Pneumatic') {
+
+            if (range >= -0.95 && range <= 0) {
+                return 0.10;
+            }
+
+            if (range > 0 && range <= 30) {
+                return 0.080;
+            }
+
+            if (range > 30 && range <= 100) {
+                return 0.020;
+            }
+        }
+
+        if (media === 'Hydraulic') {
+
+            if (range >= 0 && range <= 0.6) {
+                return 0.080;
+            }
+
+            if (range > 6 && range <= 60) {
+                return 0.020;
+            }
+
+            if (range > 60 && range <= 1000) {
+                return 0.025;
+            }
+        }
+
+        return NaN;
+    }
+
 
     const inputCell = (f, v) =>
-        `<td><input type="number" step="any" data-f="${f}" value="${v ?? ''}"></td>`;
+        `<td>
+            <input 
+                type="number" 
+                step="any" 
+                data-f="${f}" 
+                value="${v ?? ''}"
+            >
+        </td>`;
+
+    const readonlyInputCell = (f, v) =>
+        `<td>
+            <input 
+                type="number" 
+                step="any" 
+                data-f="${f}" 
+                value="${v ?? ''}"
+                readonly
+            >
+        </td>`;
+
     const calcCell = (o, extra) =>
         `<td class="calc-cell ${extra || ''}" data-o="${o}">—</td>`;
 
+
     function addRow(d) {
         d = d || {};
+
         const tr = document.createElement('tr');
         tr.className = 'line-item-row';
+
         tr.innerHTML =
             inputCell('applied', d.applied) +
             inputCell('m1', d.m1) +
             inputCell('m2', d.m2) +
-            inputCell('mean', d.mean) +
-            inputCell('dev', d.dev) +
+
+            readonlyInputCell('mean', d.mean) +
+            readonlyInputCell('dev', d.dev) +
+
             calcCell('rep') +
             calcCell('hyst') +
-            calcCell('uhyst') + calcCell('ures') +
-            inputCell('ptx', d.ptx) +
-            calcCell('comb', 'strong') + calcCell('exp', 'strong') + calcCell('pct', 'strong') +
+            calcCell('uhyst') +
+            calcCell('ures') +
+            calcCell('ptx') +
+
+            calcCell('comb', 'strong') +
+            calcCell('exp', 'strong') +
+            calcCell('pct', 'strong') +
             calcCell('cmc') +
             calcCell('max', 'strong') +
+
             '<td><button type="button" class="remove-row">✕</button></td>';
+
         body.appendChild(tr);
     }
 
-    function calculate() {
-        const assumed = num($('resolution').value) * num($('ratio').value);
-        const fsd = num($('fullScale').value);
-        const unitSelect = $('unit');
-        const conv = parseFloat(
-            unitSelect.options[unitSelect.selectedIndex].dataset.factor
-        ) || 1;
-        const ures = assumed / SQRT3;
 
-        $('assumedRes').value = isFinite(assumed) ? +assumed.toFixed(6) : '—';
+    function calculate() {
+
+        /* ---------------------------------------------------------
+         * Instrument setup
+         * --------------------------------------------------------- */
+
+        const resolution = num($('resolution').value);
+        const ratio = num($('ratio').value);
+        const refRange = num($('refRange').value);
+        const fsd = num($('fullScale').value);
+        const media = $('media').value;
+
+        /*
+         * Assumed Resolution
+         * = Resolution × Ratio
+         */
+        const assumedResolution =
+            Number.isFinite(resolution) && Number.isFinite(ratio)
+                ? resolution * ratio
+                : NaN;
+
+        /*
+         * Uncertainty due to Resolution
+         * = Assumed Resolution / sqrt(3)
+         */
+        const unResolution =
+            Number.isFinite(assumedResolution)
+                ? assumedResolution / SQRT3
+                : NaN;
+
+        $('assumedRes').value =
+            Number.isFinite(assumedResolution)
+                ? assumedResolution.toFixed(6)
+                : '—';
+
+
+        /* ---------------------------------------------------------
+         * CMC
+         * --------------------------------------------------------- */
+
+        const cmc = getCMC(media, refRange);
+
+
+        /* ---------------------------------------------------------
+         * Each calibration point
+         * --------------------------------------------------------- */
 
         Array.from(body.rows).forEach(function (tr) {
-            const get = (f) => num(tr.querySelector(`[data-f="${f}"]`).value);
-            const set = (o, t) => { tr.querySelector(`[data-o="${o}"]`).textContent = t; };
 
-            const applied = get('applied'), m1 = get('m1'), m2 = get('m2');
-            const ptx = get('ptx') * conv, cmc = get('cmc');
+            const get = (f) => {
+                const el = tr.querySelector(`[data-f="${f}"]`);
+                return el ? num(el.value) : NaN;
+            };
 
-            const mean  = (m1 + m2) / 2;
-            const dev   = applied - mean;
-            const hyst  = m2 - m1;
-            const uhyst = hyst / (2 * SQRT3);
+            const set = (o, value) => {
+                const el = tr.querySelector(`[data-o="${o}"]`);
+                if (el) {
+                    el.textContent = value;
+                }
+            };
 
-            // Repeatability is an input only; the sheet does not include it in the combined value
-            const comb = Math.sqrt(uhyst * uhyst + ures * ures + ptx * ptx);
-            const exp  = k * comb;
-            const pct  = exp / fsd * 100;
-            const pct2 = Math.round(pct * 100) / 100;
-            const max  = isFinite(cmc) ? Math.max(cmc, pct2) : pct2;
+            const setInput = (f, value) => {
+                const el = tr.querySelector(`[data-f="${f}"]`);
+                if (el) {
+                    el.value = value;
+                }
+            };
 
-            set('mean',  fmt(mean, 3));
-            set('dev',   fmt(dev, 3));
-            set('hyst',  fmt(hyst, 2));
-            set('uhyst', fmt(uhyst, 5));
-            set('ures',  fmt(ures, 5));
-            set('comb',  fmt(comb, 6));
-            set('exp',   fmt(exp, 6));
-            set('pct',   fmt(pct, 4));
-            set('max',   fmt(max, 2));
+
+            const applied = get('applied');
+            const m1 = get('m1');
+            const m2 = get('m2');
+
+
+            /* -----------------------------------------------------
+             * Mean Value
+             *
+             * Mean = (M1 + M2) / 2
+             * ----------------------------------------------------- */
+
+            let mean = NaN;
+
+            if (Number.isFinite(m1) && Number.isFinite(m2)) {
+                mean = (m1 + m2) / 2;
+            }
+
+
+            /* -----------------------------------------------------
+             * Deviation
+             *
+             * Deviation = Applied Pressure - Mean
+             * ----------------------------------------------------- */
+
+            let deviation = NaN;
+
+            if (Number.isFinite(applied) && Number.isFinite(mean)) {
+                deviation = applied - mean;
+            }
+
+
+            /* -----------------------------------------------------
+             * Repeatability
+             *
+             * Standard deviation of M1 : M2
+             *
+             * For two readings, sample standard deviation:
+             *
+             * sqrt(((M1-mean)^2 + (M2-mean)^2) / (2-1))
+             * ----------------------------------------------------- */
+
+            let repeatability = NaN;
+
+            if (
+                Number.isFinite(m1) &&
+                Number.isFinite(m2) &&
+                Number.isFinite(mean)
+            ) {
+                repeatability = Math.sqrt(
+                    Math.pow(m1 - mean, 2) +
+                    Math.pow(m2 - mean, 2)
+                );
+            }
+
+
+            /* -----------------------------------------------------
+             * Hysteresis
+             *
+             * Hysteresis = M2 - M1
+             * ----------------------------------------------------- */
+
+            let hysteresis = NaN;
+
+            if (Number.isFinite(m1) && Number.isFinite(m2)) {
+                hysteresis = m2 - m1;
+            }
+
+
+            /* -----------------------------------------------------
+             * Std. Un. for Hysteresis
+             *
+             * = Hysteresis / (2 × sqrt(3))
+             * ----------------------------------------------------- */
+
+            let uHysteresis = NaN;
+
+            if (Number.isFinite(hysteresis)) {
+                uHysteresis =
+                    hysteresis / (2 * SQRT3);
+            }
+
+
+            /* -----------------------------------------------------
+             * Std. Un. for Press Tx
+             *
+             * = Reference Instrument Range × CMC
+             *
+             * IMPORTANT:
+             * CMC is entered as a percentage.
+             *
+             * Therefore 0.10 % = 0.001
+             * 0.080 % = 0.0008
+             * etc.
+             *
+             * ----------------------------------------------------- */
+
+            let stdUnPressTx = NaN;
+
+            if (
+                Number.isFinite(refRange) &&
+                Number.isFinite(cmc)
+            ) {
+                stdUnPressTx =
+                    refRange * (cmc / 100);
+            }
+
+
+            /* -----------------------------------------------------
+             * Combined Standard Uncertainty
+             *
+             * sqrt(
+             *     uhysteresis²
+             *   + uresolution²
+             *   + upressTx²
+             * )
+             *
+             * Repeatability is displayed separately but is NOT
+             * included because it is not present in the formula
+             * supplied.
+             * ----------------------------------------------------- */
+
+            let combined = NaN;
+
+            if (
+                Number.isFinite(uHysteresis) &&
+                Number.isFinite(unResolution) &&
+                Number.isFinite(stdUnPressTx)
+            ) {
+                combined = Math.sqrt(
+                    Math.pow(uHysteresis, 2) +
+                    Math.pow(unResolution, 2) +
+                    Math.pow(stdUnPressTx, 2)
+                );
+            }
+
+
+            /* -----------------------------------------------------
+             * Expanded Uncertainty
+             *
+             * = Combined Standard Uncertainty × 2
+             * ----------------------------------------------------- */
+
+            let expanded = NaN;
+
+            if (Number.isFinite(combined)) {
+                expanded = combined * K_FACTOR;
+            }
+
+
+            /* -----------------------------------------------------
+             * Expanded Uncertainty (% of FSD)
+             *
+             * = Expanded Uncertainty / UUC Full Scale × 100
+             * ----------------------------------------------------- */
+
+            let expandedPercent = NaN;
+
+            if (
+                Number.isFinite(expanded) &&
+                Number.isFinite(fsd) &&
+                fsd !== 0
+            ) {
+                expandedPercent =
+                    (expanded / fsd) * 100;
+            }
+
+
+            /* -----------------------------------------------------
+             * Maximum Expanded Uncertainty
+             *
+             * Compare:
+             *
+             * Expanded Uncertainty (% FSD)
+             * versus
+             * Accutech CMC (% FSD)
+             *
+             * Take the bigger value.
+             * ----------------------------------------------------- */
+
+            let maxExpanded = NaN;
+
+            if (
+                Number.isFinite(expandedPercent) &&
+                Number.isFinite(cmc)
+            ) {
+                maxExpanded =
+                    Math.max(expandedPercent, cmc);
+            }
+
+
+            /* -----------------------------------------------------
+             * Display calculated values
+             * ----------------------------------------------------- */
+
+            setInput(
+                'mean',
+                Number.isFinite(mean)
+                    ? mean.toFixed(4)
+                    : ''
+            );
+
+            setInput(
+                'dev',
+                Number.isFinite(deviation)
+                    ? deviation.toFixed(4)
+                    : ''
+            );
+
+            set(
+                'rep',
+                fmt(repeatability, 5)
+            );
+
+            set(
+                'hyst',
+                fmt(hysteresis, 5)
+            );
+
+            set(
+                'uhyst',
+                fmt(uHysteresis, 6)
+            );
+
+            set(
+                'ures',
+                fmt(unResolution, 6)
+            );
+
+            set(
+                'ptx',
+                fmt(stdUnPressTx, 6)
+            );
+
+            set(
+                'comb',
+                fmt(combined, 6)
+            );
+
+            set(
+                'exp',
+                fmt(expanded, 6)
+            );
+
+            set(
+                'pct',
+                fmt(expandedPercent, 4)
+            );
+
+            set(
+                'cmc',
+                Number.isFinite(cmc)
+                    ? cmc.toFixed(3)
+                    : '—'
+            );
+
+            set(
+                'max',
+                fmt(maxExpanded, 4)
+            );
         });
 
+
+        /* ---------------------------------------------------------
+         * Row count
+         * --------------------------------------------------------- */
+
         const n = body.rows.length;
-        $('rowCount').textContent = n + ' calibration point' + (n === 1 ? '' : 's');
+
+        $('rowCount').textContent =
+            n +
+            ' calibration point' +
+            (n === 1 ? '' : 's');
     }
 
+
     function reset() {
+
         body.innerHTML = '';
-        DEFAULT_ROWS.forEach(addRow);
+
+        if (typeof DEFAULT_ROWS !== 'undefined') {
+            DEFAULT_ROWS.forEach(addRow);
+        }
+
         calculate();
     }
 
+
     function exportCsv() {
-        const head = ['Applied Pressure','M1','M2','Repeatability','Mean Value','Deviation','Hysteresis',
-                      'Std Un Hysteresis','Un due to Resolution','Std Un Press Tx','Combined Std Uncertainty',
-                      'Expanded Uncertainty','Expanded % FSD','Accutech CMC % FSD','Max Expanded % FSD'];
-        const cols = [['f','applied'],['f','m1'],['f','m2'],['f','rep'],['o','mean'],['o','dev'],['o','hyst'],
-                      ['o','uhyst'],['o','ures'],['f','ptx'],['o','comb'],['o','exp'],['o','pct'],['f','cmc'],['o','max']];
+
+        const head = [
+            'Applied Pressure',
+            'M1',
+            'M2',
+            'Mean Value',
+            'Deviation',
+            'Repeatability',
+            'Hysteresis',
+            'Std Un Hysteresis',
+            'Un due to Resolution',
+            'Std Un Press Tx',
+            'Combined Std Uncertainty',
+            'Expanded Uncertainty',
+            'Expanded % FSD',
+            'Accutech CMC % FSD',
+            'Max Expanded % FSD'
+        ];
+
+        const cols = [
+            ['f', 'applied'],
+            ['f', 'm1'],
+            ['f', 'm2'],
+            ['f', 'mean'],
+            ['f', 'dev'],
+            ['o', 'rep'],
+            ['o', 'hyst'],
+            ['o', 'uhyst'],
+            ['o', 'ures'],
+            ['o', 'ptx'],
+            ['o', 'comb'],
+            ['o', 'exp'],
+            ['o', 'pct'],
+            ['o', 'cmc'],
+            ['o', 'max']
+        ];
+
         const lines = [head.join(',')];
+
         Array.from(body.rows).forEach(function (tr) {
-            lines.push(cols.map(function (c) {
-                const el = tr.querySelector(c[0] === 'f' ? `[data-f="${c[1]}"]` : `[data-o="${c[1]}"]`);
-                const v = c[0] === 'f' ? el.value : el.textContent;
-                return v === '—' ? '' : v;
-            }).join(','));
+
+            lines.push(
+                cols.map(function (c) {
+
+                    const selector =
+                        c[0] === 'f'
+                            ? `[data-f="${c[1]}"]`
+                            : `[data-o="${c[1]}"]`;
+
+                    const el = tr.querySelector(selector);
+
+                    if (!el) {
+                        return '';
+                    }
+
+                    const v =
+                        c[0] === 'f'
+                            ? el.value
+                            : el.textContent;
+
+                    return v === '—' ? '' : v;
+
+                }).join(',')
+            );
         });
+
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
+
+        a.href = URL.createObjectURL(
+            new Blob(
+                [lines.join('\n')],
+                { type: 'text/csv' }
+            )
+        );
+
         a.download = 'uncertainty.csv';
+
         a.click();
+
         URL.revokeObjectURL(a.href);
     }
 
-    // Events
-    $('uncertainty-page').addEventListener('input', calculate);
 
-    $('unit').addEventListener('change', function () {
-        $('convFactor').value = this.options[this.selectedIndex].dataset.factor;
-        $('convFactor').disabled = this.value === 'bar';
-        calculate();
-    });
+    /* -------------------------------------------------------------
+     * Events
+     * ------------------------------------------------------------- */
 
-    body.addEventListener('click', function (e) {
-        const btn = e.target.closest('.remove-row');
-        if (btn) { btn.closest('tr').remove(); calculate(); }
-    });
+    $('uncertainty-page').addEventListener(
+        'input',
+        calculate
+    );
 
-    $('add-point').addEventListener('click', function () { addRow(); calculate(); });
-    $('btn-reset').addEventListener('click', reset);
-    $('btn-csv').addEventListener('click', exportCsv);
-    $('btn-print').addEventListener('click', function () { window.print(); });
 
+    $('media').addEventListener(
+        'change',
+        calculate
+    );
+
+
+    $('refRange').addEventListener(
+        'input',
+        calculate
+    );
+
+
+    $('fullScale').addEventListener(
+        'input',
+        calculate
+    );
+
+
+    $('unit').addEventListener(
+        'change',
+        calculate
+    );
+
+
+    body.addEventListener(
+        'click',
+        function (e) {
+
+            const btn =
+                e.target.closest('.remove-row');
+
+            if (btn) {
+                btn.closest('tr').remove();
+                calculate();
+            }
+        }
+    );
+
+
+    $('add-point').addEventListener(
+        'click',
+        function () {
+            addRow();
+            calculate();
+        }
+    );
+
+
+    const resetButton = $('btn-reset');
+
+    if (resetButton) {
+        resetButton.addEventListener(
+            'click',
+            reset
+        );
+    }
+
+
+    const csvButton = $('btn-csv');
+
+    if (csvButton) {
+        csvButton.addEventListener(
+            'click',
+            exportCsv
+        );
+    }
+
+
+    const printButton = $('btn-print');
+
+    if (printButton) {
+        printButton.addEventListener(
+            'click',
+            function () {
+                window.print();
+            }
+        );
+    }
+
+
+    /* Initial calculation */
     calculate();
+
 })();
 </script>
 {% endblock %}
