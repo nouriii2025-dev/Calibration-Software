@@ -5,53 +5,6 @@
 <h1>Uncertainty Calculation</h1>
 
 <div id="uncertainty-page">
-<!-- 
-    <div class="card">
-        <h2>Instrument Setup</h2>
-        <div class="row">
-            <div>
-                <label>Resolution</label>
-                <input type="number" step="any" id="resolution" value="{{ certificate.device_resolution }}" readonly>
-            </div>
-            <div>
-                <label>Ratio</label>
-                <input type="number" step="any" id="ratio" value="{{ certificate.device_ratio }}" readonly>
-            </div>
-            <div>
-                <label>Assumed Resolution</label>
-                <input type="text" id="assumedRes">
-            </div>
-        </div>
-        <div class="row">
-            <div>
-                <label>Reference Instrument Range</label>
-                <input type="number" step="any" id="refRange">
-            </div>
-            <div>
-                <label>UUC Full Scale</label>
-                <input type="number" step="any" id="fullScale">
-            </div>
-            <div>
-                <label>UUC Unit</label>
-                <select id="unit">
-                    <option value="bar" data-factor="1" selected>bar</option>
-                    <option value="psi" data-factor="14.5038">psi</option>
-                    <option value="kPa" data-factor="100">kPa</option>
-                    <option value="MPa" data-factor="0.1">MPa</option>
-                    <option value="kgf/cm²" data-factor="1.01972">kgf/cm²</option>
-                </select>
-            </div>
-        </div>
-        <div class="row">
-            <div>
-                <label>Pressure Media</label>
-                <select id="media">
-                    <option>Pneumatic</option>
-                    <option>Hydraulic</option>
-                </select>
-            </div>
-        </div>
-    </div> -->
     <div class="card">
     <h2>Instrument Setup</h2>
 
@@ -79,19 +32,6 @@
     </div>
 
     <div class="row">
-        <!-- <div>
-            <label>Reference Instrument Range</label>
-            <div class="readonly-value">
-                {{ certificate.reference_instrument_range|default:"—" }}
-            </div>
-        </div> -->
-
-        <!-- <div>
-            <label>UUC Full Scale</label>
-            <div class="readonly-value">
-                {{ certificate.uuc_full_scale|default:"—" }}
-            </div>
-        </div> -->
         <div>
             <label>Reference Instrument Range</label>
             <div class="readonly-value">
@@ -131,6 +71,13 @@
     </div>
 </div>
 
+
+<form
+    method="post"
+    action="{% url 'save_uncertainty' certificate.pk %}"
+    id="uncertainty-form"
+>
+    {% csrf_token %}
     <div class="card">
         <h2>Uncertainty Results</h2>
         <p class="muted">Enter the applied pressure and readings for each point. Mean, deviation, hysteresis and uncertainty values are calculated automatically.</p>
@@ -156,59 +103,67 @@
                 </tr>
             </thead>
             <tbody id="calc-body">
-    {% for result in results %}
-    <tr class="line-item-row">
+            {% for result in results %}
+            <tr class="line-item-row">
 
-        <td data-f="applied">
-            {{ result.applied_value|default:"—" }}
-        </td>
+                <td data-f="applied">
+                    {{ result.applied_value|default:"—" }}
+                </td>
 
-        <td data-f="m1">
-            {{ result.upward_reading|default:"—" }}
-        </td>
+                <td data-f="m1">
+                    {{ result.upward_reading|default:"—" }}
+                </td>
 
-        <td data-f="m2">
-            {{ result.downward_reading|default:"—" }}
-        </td>
+                <td data-f="m2">
+                    {{ result.downward_reading|default:"—" }}
+                </td>
 
-        <td data-f="mean">
-            {{ result.mean_value|default:"—" }}
-        </td>
+                <td data-f="mean">
+                    {{ result.mean_value|default:"—" }}
+                </td>
 
-        <td data-f="dev">
-            {{ result.deviation|default:"—" }}
-        </td>
+                <td data-f="dev">
+                    {{ result.deviation|default:"—" }}
+                </td>
 
-        <td class="calc-cell" data-o="rep">—</td>
+                <td class="calc-cell" data-o="rep">—</td>
 
-        <td class="calc-cell" data-o="hyst">—</td>
+                <td class="calc-cell" data-o="hyst">—</td>
 
-        <td class="calc-cell" data-o="uhyst">—</td>
+                <td class="calc-cell" data-o="uhyst">—</td>
 
-        <td class="calc-cell" data-o="ures">—</td>
+                <td class="calc-cell" data-o="ures">—</td>
 
-        <td class="calc-cell" data-o="ptx">—</td>
+                <td class="calc-cell" data-o="ptx">—</td>
 
-        <td class="calc-cell strong" data-o="comb">—</td>
+                <td class="calc-cell strong" data-o="comb">—</td>
 
-        <td class="calc-cell strong" data-o="exp">—</td>
+                <td class="calc-cell strong" data-o="exp">—</td>
 
-        <td class="calc-cell strong" data-o="pct">—</td>
+                <td class="calc-cell strong" data-o="pct">—</td>
 
-        <td class="calc-cell" data-o="cmc">—</td>
+                <td class="calc-cell" data-o="cmc">—</td>
 
-        <td class="calc-cell strong" data-o="max">—</td>
+                <td class="calc-cell strong" data-o="max">—</td>
 
-        <td>
-            <!-- No editing/removing on calculation page -->
-        </td>
+                <td>
+                    <!-- No editing/removing on calculation page -->
+                </td>
 
-    </tr>
-    {% endfor %}
-</tbody>
+            </tr>
+            {% endfor %}
+        </tbody>
         </table>
         </div>
+         <button
+            type="submit"
+            class="btn"
+            id="save-uncertainty"
+        >
+            Save Expanded Uncertainty
+        </button>
     </div>
+    </form>
 
 </div>
 
@@ -379,22 +334,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
         if (mediaName === "pneumatic") {
 
-            // -0.95 to 0 bar
-            // if (
-            //     appliedPressureBar >= -0.95 &&
-            //     appliedPressureBar <= 0
-            // ) {
-            //     return 0.10;
-            // }
-
-            // // 0 to 30 bar
-            // if (
-            //     appliedPressureBar > 0 &&
-            //     appliedPressureBar <= 30
-            // ) {
-            //     return 0.080;
-            // }
-            // -0.95 to below 0 bar
             if (
                 appliedPressureBar >= -0.95 &&
                 appliedPressureBar < 0
@@ -702,6 +641,22 @@ document.addEventListener("DOMContentLoaded", function () {
                     cmc
                 );
         }
+
+        let hiddenInput = row.querySelector(
+        'input[name="uncertainty[]"]'
+    );
+
+    if (!hiddenInput) {
+        hiddenInput = document.createElement("input");
+        hiddenInput.type = "hidden";
+        hiddenInput.name = "uncertainty[]";
+        row.appendChild(hiddenInput);
+    }
+
+    hiddenInput.value = Number.isFinite(maximum)
+        ? maximum.toFixed(4)
+        : "";
+        
 
 
         // =====================================================

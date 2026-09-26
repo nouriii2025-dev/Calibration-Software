@@ -18,7 +18,12 @@
                     <a href="{% url 'instrument_list' %}">Instruments</a>
                     <a href="{% url 'technician_list' %}">Technicians</a>
                 {% endif %}
-                <a href="{% url 'logout' %}">Log out ({{ user.username }})</a>
+                <form method="post" action="{% url 'logout' %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="logout-btn">
+                        Log out ({{ user.username }})
+                    </button>
+                </form>
             {% else %}
                 <a href="{% url 'login' %}">Log in</a>
                 <a href="{% url 'signup' %}">Sign up</a>

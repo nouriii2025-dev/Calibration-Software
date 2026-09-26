@@ -107,114 +107,6 @@ def _can_edit_certificate(user, certificate):
     return bool(certificate.line_item and certificate.line_item.assigned_to_id == user.id)
 
 
-# @login_required
-# def certificate_detail(request, pk):
-#     certificate = get_object_or_404(
-#         Certificate.objects.select_related("line_item"),
-#         pk=pk
-#     )
-
-#     if not _can_edit_certificate(request.user, certificate):
-#         messages.error(request, "You do not have access to that certificate.")
-#         return redirect("dashboard")
-
-#     ResultFormSet = get_calibration_result_formset(certificate)
-
-#     if request.method == "POST":
-#         cert_form = CertificateForm(
-#             request.POST,
-#             instance=certificate
-#         )
-
-#         result_formset = ResultFormSet(
-#             request.POST,
-#             instance=certificate,
-#             prefix="results"
-#         )
-
-#         if cert_form.is_valid() and result_formset.is_valid():
-
-#             cert_form.save()
-
-#             # Calculate Mean and Deviation before saving results
-#             for result_form in result_formset:
-#                 if result_form.cleaned_data.get("DELETE"):
-#                     continue
-
-#                 applied = result_form.cleaned_data.get("applied_value")
-#                 upward = result_form.cleaned_data.get("upward_reading")
-#                 downward = result_form.cleaned_data.get("downward_reading")
-
-#                 if applied is not None and upward is not None and downward is not None:
-
-#                     # Convert form values to numbers
-#                     # applied = float(applied)
-#                     # upward = float(upward)
-#                     # downward = float(downward)
-
-#                     # # Mean = (M1 + M2) / 2
-#                     # mean = (upward + downward) / 2
-
-#                     # # Deviation = A - M
-#                     # deviation = applied - mean
-
-#                     # result_form.instance.mean_value = mean
-#                     # result_form.instance.deviation = deviation
-#                     # Convert values to Decimal
-#                     applied = Decimal(str(applied))
-#                     upward = Decimal(str(upward))
-#                     downward = Decimal(str(downward))
-
-#                     # Mean = (M1 + M2) / 2
-#                     mean = (upward + downward) / Decimal("2")
-
-#                     # Deviation = A - M
-#                     deviation = applied - mean
-
-#                     # Keep 4 decimal places
-#                     mean = mean.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-#                     deviation = deviation.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-
-#                     result_form.instance.mean_value = mean
-#                     result_form.instance.deviation = deviation
-
-#             result_formset.save()
-
-#             messages.success(
-#                 request,
-#                 f"Certificate {certificate.number} updated."
-#             )
-
-#             if "save_and_print" in request.POST:
-#                 return redirect(
-#                     "certificate_print",
-#                     pk=certificate.pk
-#                 )
-
-#             return redirect(
-#                 "job_detail",
-#                 pk=certificate.job_id
-#             )
-
-#     else:
-#         cert_form = CertificateForm(
-#             instance=certificate
-#         )
-
-#         result_formset = ResultFormSet(
-#             instance=certificate,
-#             prefix="results"
-#         )
-
-#     return render(
-#         request,
-#         "labmanager/certificate_detail.html",
-#         {
-#             "certificate": certificate,
-#             "cert_form": cert_form,
-#             "result_formset": result_formset,
-#         },
-#     )
 @login_required
 def certificate_detail(request, pk):
     certificate = get_object_or_404(
@@ -228,28 +120,26 @@ def certificate_detail(request, pk):
 
     ResultFormSet = get_calibration_result_formset(certificate)
 
-    if request.method == "POST":
-        cert_form = CertificateForm(
-            request.POST,
-            instance=certificate
-        )
+    # Always initialize the forms first.
+    cert_form = CertificateForm(
+        request.POST or None,
+        instance=certificate
+    )
 
-        result_formset = ResultFormSet(
-            request.POST,
-            instance=certificate,
-            prefix="results"
-        )
+    result_formset = ResultFormSet(
+        request.POST or None,
+        instance=certificate,
+        prefix="results"
+    )
+
+    if request.method == "POST":
 
         if cert_form.is_valid() and result_formset.is_valid():
 
-            # ---------------------------------------------------------
             # Save certificate
-            # ---------------------------------------------------------
             cert_form.save()
 
-            # ---------------------------------------------------------
             # Calculate Mean and Deviation before saving results
-            # ---------------------------------------------------------
             for result_form in result_formset:
                 if result_form.cleaned_data.get("DELETE"):
                     continue
@@ -283,45 +173,44 @@ def certificate_detail(request, pk):
                     result_form.instance.mean_value = mean
                     result_form.instance.deviation = deviation
 
+            # Save calibration results
             result_formset.save()
 
-            # ---------------------------------------------------------
             # Uncertainty Calculation button
-            # ---------------------------------------------------------
             if "calculate_uncertainty" in request.POST:
                 return redirect(
                     "uncertainty",
                     pk=certificate.pk
                 )
 
-            # ---------------------------------------------------------
-            # Normal Save Certificate
-            # ---------------------------------------------------------
-            messages.success(
-                request,
-                f"Certificate {certificate.number} updated."
-            )
-
+            # Save and Print Certificate
             if "save_and_print" in request.POST:
                 return redirect(
                     "certificate_print",
                     pk=certificate.pk
                 )
 
+            # Normal Save Certificate
+            messages.success(
+                request,
+                f"Certificate {certificate.number} updated."
+            )
+
             return redirect(
                 "job_detail",
                 pk=certificate.job_id
             )
 
-    else:
-        cert_form = CertificateForm(
-            instance=certificate
-        )
+        else:
+            # Show validation errors in terminal while debugging
+            print("CERTIFICATE FORM ERRORS:")
+            print(cert_form.errors)
 
-        result_formset = ResultFormSet(
-            instance=certificate,
-            prefix="results"
-        )
+            print("RESULT FORMSET ERRORS:")
+            print(result_formset.errors)
+
+            print("RESULT FORMSET NON-FORM ERRORS:")
+            print(result_formset.non_form_errors())
 
     return render(
         request,
@@ -332,6 +221,7 @@ def certificate_detail(request, pk):
             "result_formset": result_formset,
         },
     )
+
 
 @login_required
 def certificate_print(request, pk):
@@ -412,30 +302,6 @@ def technician_toggle(request, pk):
     technician.save(update_fields=["is_active"])
     return redirect("technician_list")
 
-# @login_required
-# def uncertainty(request, pk):
-#     certificate = get_object_or_404(
-#         Certificate.objects.select_related(
-#             "job",
-#             "line_item",
-#             "line_item__instrument",
-#         ).prefetch_related("results"),
-#         pk=pk,
-#     )
-
-#     if not _can_edit_certificate(request.user, certificate):
-#         messages.error(request, "You do not have access to this certificate.")
-#         return redirect("dashboard")
-
-#     results = certificate.results.all()
-
-#     return render(request,"labmanager/uncertainty.html",
-#         {
-#             "certificate": certificate,
-#             "results": results,
-#         },
-#     )
-
 
 # ================================================================
 # UNCERTAINTY / CMC HELPERS
@@ -515,51 +381,6 @@ def get_cmc(applied_pressure, uuc_unit, pressure_media):
     return None
 
 
-# @login_required
-# def uncertainty(request, pk):
-#     certificate = get_object_or_404(
-#         Certificate.objects.select_related(
-#             "job",
-#             "line_item",
-#             "line_item__instrument",
-#         ).prefetch_related("results"),
-#         pk=pk,
-#     )
-
-#     if not _can_edit_certificate(request.user, certificate):
-#         messages.error(
-#             request,
-#             "You do not have access to this certificate."
-#         )
-#         return redirect("dashboard")
-
-#     results = certificate.results.all()
-
-#     # ---------------------------------------------------------
-#     # Assumed Resolution
-#     #
-#     # Assumed Resolution = Resolution × Ratio
-#     # ---------------------------------------------------------
-#     assumed_resolution = None
-
-#     if (
-#         certificate.device_resolution is not None
-#         and certificate.device_ratio is not None
-#     ):
-#         assumed_resolution = (
-#             certificate.device_resolution
-#             * certificate.device_ratio
-#         )
-
-#     return render(
-#         request,
-#         "labmanager/uncertainty.html",
-#         {
-#             "certificate": certificate,
-#             "results": results,
-#             "assumed_resolution": assumed_resolution,
-#         },
-#     )
 @login_required
 def uncertainty(request, pk):
 
@@ -617,4 +438,61 @@ def uncertainty(request, pk):
             "results": certificate.results.all(),
             "assumed_resolution": assumed_resolution,
         },
+    )
+
+
+@login_required
+def save_uncertainty(request, pk):
+    certificate = get_object_or_404(
+        Certificate.objects.prefetch_related("results"),
+        pk=pk,
+    )
+
+    if not _can_edit_certificate(request.user, certificate):
+        messages.error(
+            request,
+            "You do not have access to this certificate."
+        )
+        return redirect("dashboard")
+
+    if request.method != "POST":
+        return redirect("uncertainty", pk=certificate.pk)
+
+    # Receive calculated maximum uncertainty values from JavaScript
+    uncertainty_values = request.POST.getlist("uncertainty[]")
+
+    results = list(
+        certificate.results.all().order_by("id")
+    )
+
+    for result, value in zip(results, uncertainty_values):
+
+        value = (value or "").strip()
+
+        if value:
+            try:
+                decimal_value = Decimal(value)
+
+                result.uncertainty = str(
+                    decimal_value.quantize(
+                        Decimal("0.0001"),
+                        rounding=ROUND_HALF_UP
+                    )
+                )
+
+            except Exception:
+                result.uncertainty = ""
+        else:
+            result.uncertainty = ""
+
+        result.save(update_fields=["uncertainty"])
+
+    messages.success(
+        request,
+        "Expanded uncertainty values updated successfully."
+    )
+
+    return redirect(
+        "certificate_detail",
+        pk=certificate.pk
     )

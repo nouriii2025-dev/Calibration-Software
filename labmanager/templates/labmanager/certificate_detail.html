@@ -11,6 +11,20 @@
 <form method="post">
     {% csrf_token %}
 
+    {% if cert_form.errors %}
+        <div class="card" style="border: 1px solid #dc2626; color: #dc2626;">
+            <strong>Certificate form errors:</strong>
+            {{ cert_form.errors }}
+        </div>
+    {% endif %}
+
+    {% if result_formset.errors %}
+        <div class="card" style="border: 1px solid #dc2626; color: #dc2626;">
+            <strong>Calibration result errors:</strong>
+            {{ result_formset.errors }}
+        </div>
+    {% endif %}
+
     <div class="card">
         <h2>Device Under Test</h2>
         <div class="row">
@@ -21,6 +35,10 @@
             <div>
                 <label>Serial Number</label>
                 {{ cert_form.device_serial }}
+            </div>
+            <div>
+                <label>Tag Number</label>
+                {{ cert_form.device_tag_number }}
             </div>
         </div>
         <div class="row">
@@ -150,19 +168,41 @@
             </thead>
 
             <tbody id="results-body">
+       
                 {% for form in result_formset %}
-                <tr class="result-row">
-                    <td>{{ form.applied_value }}</td>             
-                    <td>{{ form.upward_reading }}</td>             
-                    <td>{{ form.downward_reading }}</td>
-                    <td>{{ form.mean_value }}</td>
-                    <td>{{ form.deviation }}</td>
-                    <td>{{ form.uncertainty }}</td>
-                    <td>{{ form.remarks }}</td>
-                    <td><button type="button" class="remove-row">✕</button></td>
+                    <tr class="result-row">
 
-                </tr>
-                {% endfor %}
+                        {{ form.id }}
+
+                        <td>{{ form.applied_value }}</td>
+
+                        <td>{{ form.upward_reading }}</td>
+
+                        <td>{{ form.downward_reading }}</td>
+
+                        <td>{{ form.mean_value }}</td>
+
+                        <td>{{ form.deviation }}</td>
+
+                        <td>{{ form.uncertainty }}</td>
+
+                        <td>
+                            <input
+                                type="text"
+                                class="pass-fail-field"
+                                readonly
+                                placeholder="—"
+                            >
+
+                            {{ form.remarks.as_hidden }}
+                        </td>
+
+                        <td>
+                            <button type="button" class="remove-row">✕</button>
+                        </td>
+
+                    </tr>
+                    {% endfor %}
             </tbody>
         </table>
     </div>
@@ -181,12 +221,16 @@
         <h2>Sign-off</h2>
         <div class="row">
             <div>
+                <label>Issue Date</label>
+                {{ cert_form.issue_date }}
+            </div>
+            <div>
                 <label>Calibration Date</label>
                 {{ cert_form.calibration_date }}
             </div>
             <div>
-                <label>Issue Date</label>
-                {{ cert_form.issue_date }}
+                <label>Re-Calibration Date</label>
+                {{ cert_form.re_calibration_date }}
             </div>
         </div>
         <div class="row">
@@ -204,13 +248,14 @@
     <button type="submit" class="btn">Save Certificate</button>
 
     {% if certificate.calibration_date or certificate.results.exists %}
-        <a
-            href="{% url 'certificate_print' certificate.pk %}"
-            target="_blank"
+        <button
+            type="submit"
+            name="save_and_print"
+            value="1"
             class="btn secondary"
         >
             Print Certificate
-        </a>
+        </button>
     {% endif %}
 
 </form>
@@ -233,156 +278,6 @@
 </table>
 
 
-<!-- <script>
-(function () {
-    const addBtn = document.getElementById('add-result');
-    const body = document.getElementById('results-body');
-    const totalForms = document.getElementById('id_results-TOTAL_FORMS');
-
-    function calculateRow(row) {
-        const appliedInput = row.querySelector('input[name$="-applied_value"]');
-        const upwardInput = row.querySelector('input[name$="-upward_reading"]');
-        const downwardInput = row.querySelector('input[name$="-downward_reading"]');
-        const meanInput = row.querySelector('input[name$="-mean_value"]');
-        const deviationInput = row.querySelector('input[name$="-deviation"]');
-
-        if (!appliedInput || !upwardInput || !downwardInput ||
-            !meanInput || !deviationInput) {
-            return;
-        }
-
-        const applied = parseFloat(appliedInput.value);
-        const upward = parseFloat(upwardInput.value);
-        const downward = parseFloat(downwardInput.value);
-
-        // Calculate only when M1 and M2 are entered
-        if (!isNaN(upward) && !isNaN(downward)) {
-
-            // Mean = (M1 + M2) / 2
-            const mean = (upward + downward) / 2;
-
-            meanInput.value = mean.toFixed(3);
-
-            // Calculate deviation when Applied Pressure is available
-            if (!isNaN(applied)) {
-                // Deviation = A - M
-                const deviation = applied - mean;
-
-                deviationInput.value = deviation.toFixed(3);
-            } else {
-                deviationInput.value = '';
-            }
-
-        } else {
-            meanInput.value = '';
-            deviationInput.value = '';
-        }
-    }
-
-    function attachCalculation(row) {
-        const inputs = row.querySelectorAll(
-            'input[name$="-applied_value"], ' +
-            'input[name$="-upward_reading"], ' +
-            'input[name$="-downward_reading"]'
-        );
-
-        inputs.forEach(function (input) {
-            input.addEventListener('input', function () {
-                calculateRow(row);
-            });
-
-            input.addEventListener('change', function () {
-                calculateRow(row);
-            });
-        });
-    }
-
-    // Attach calculation to existing rows
-    body.querySelectorAll('.result-row').forEach(function (row) {
-        attachCalculation(row);
-
-        const removeBtn = row.querySelector('.remove-row');
-
-        if (removeBtn) {
-            removeBtn.addEventListener('click', function () {
-                row.remove();
-            });
-        }
-    });
-
-    // Add new result row
-    addBtn.addEventListener('click', function () {
-        const idx = parseInt(totalForms.value, 10);
-
-        const emptyRow = document
-            .getElementById('result-empty-row')
-            .querySelector('tr')
-            .cloneNode(true);
-
-        emptyRow.innerHTML = emptyRow.innerHTML.replace(
-            /__prefix__/g,
-            idx
-        );
-
-        body.appendChild(emptyRow);
-
-        totalForms.value = idx + 1;
-
-        // Enable calculation for the new row
-        attachCalculation(emptyRow);
-
-        const removeBtn = emptyRow.querySelector('.remove-row');
-
-        if (removeBtn) {
-            removeBtn.addEventListener('click', function () {
-                emptyRow.remove();
-            });
-        }
-    });
-})();
-
-function calculateAssumedResolution() {
-    const resolution = parseFloat(
-        document.getElementById('id_device_resolution')?.value
-    );
-
-    const ratio = parseFloat(
-        document.getElementById('id_device_ratio')?.value
-    );
-
-    const output = document.getElementById('assumed-resolution');
-
-    if (!output) {
-        return;
-    }
-
-    if (Number.isFinite(resolution) && Number.isFinite(ratio)) {
-        output.value = (resolution * ratio).toFixed(6);
-    } else {
-        output.value = '';
-    }
-}
-
-document.addEventListener('DOMContentLoaded', function () {
-    calculateAssumedResolution();
-
-    document
-        .getElementById('id_device_resolution')
-        ?.addEventListener(
-            'input',
-            calculateAssumedResolution
-        );
-
-    document
-        .getElementById('id_device_ratio')
-        ?.addEventListener(
-            'input',
-            calculateAssumedResolution
-        );
-});
-
-</script> -->
-
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
@@ -391,13 +286,17 @@ document.addEventListener("DOMContentLoaded", function () {
             return NaN;
         }
 
-        const text = String(value).trim();
+        let text = String(value).trim();
 
         if (text === "" || text === "—") {
             return NaN;
         }
 
+        // Allow values such as "1%" or "0.5%"
+        text = text.replace("%", "").trim();
+
         const number = Number(text);
+
         return Number.isFinite(number) ? number : NaN;
     }
 
@@ -431,8 +330,17 @@ document.addEventListener("DOMContentLoaded", function () {
     const referenceRangeText =
         "{{ certificate.reference_instrument_range|default:''|escapejs }}";
 
+    // const fullScaleText =
+    //     "{{ certificate.uuc_full_scale|default:''|escapejs }}";
+    const fullScaleInput =
+        document.querySelector(
+            'input[name="uuc_full_scale"]'
+        );
+
     const fullScaleText =
-        "{{ certificate.uuc_full_scale|default:''|escapejs }}";
+        fullScaleInput
+            ? fullScaleInput.value
+            : "";
 
     const unitText =
         "{{ certificate.uuc_unit|default:'bar'|escapejs }}";
@@ -447,6 +355,32 @@ document.addEventListener("DOMContentLoaded", function () {
     const fullScale = toNumber(fullScaleText);
     const unit = unitText;
 
+    // const accuracyText =
+    //     "{{ certificate.device_accuracy|default:''|escapejs }}";
+
+    // const accuracy = toNumber(accuracyText);
+    const accuracyInput =
+        document.querySelector(
+            'input[name="device_accuracy"]'
+        );
+
+    const accuracyText =
+        accuracyInput
+            ? accuracyInput.value
+            : "";
+
+    const accuracy = toNumber(accuracyText);
+
+    console.log("PASS/FAIL DEBUG");
+    console.log("Accuracy:", accuracyText, accuracy);
+    console.log("Full Scale:", fullScaleText, fullScale);
+    console.log("Tolerance:",
+        Number.isFinite(fullScale) &&
+        Number.isFinite(accuracy)
+            ? Math.abs(fullScale) * (Math.abs(accuracy) / 100)
+            : "INVALID"
+    );
+
 
     // =========================================================
     // ASSUMED RESOLUTION
@@ -460,6 +394,14 @@ document.addEventListener("DOMContentLoaded", function () {
         Number.isFinite(ratio)
     ) {
         assumedResolution = resolution * ratio;
+    }
+
+    const assumedResolutionInput = document.getElementById("assumed-resolution");
+
+    if (assumedResolutionInput) {
+        assumedResolutionInput.value = Number.isFinite(assumedResolution)
+            ? format(assumedResolution, 4)
+            : "";
     }
 
 
@@ -598,22 +540,30 @@ document.addEventListener("DOMContentLoaded", function () {
     // RESULTS TABLE
     // =========================================================
 
-    document.querySelectorAll("#calc-body tr").forEach(function (row) {
+    function calculateResultRow(row) {
+        const appliedInput =
+            row.querySelector('input[name$="-applied_value"]');
 
-        const m1Cell =
-            row.querySelector('[data-f="m1"]');
+        const m1Input =
+            row.querySelector('input[name$="-upward_reading"]');
 
-        const m2Cell =
-            row.querySelector('[data-f="m2"]');
+        const m2Input =
+            row.querySelector('input[name$="-downward_reading"]');
 
-        const appliedCell =
-            row.querySelector('[data-f="applied"]');
+        const uncertaintyInput =
+            row.querySelector('input[name$="-uncertainty"]');
 
+        const applied =
+            toNumber(appliedInput?.value);
 
-        const m1 = toNumber(m1Cell?.textContent);
-        const m2 = toNumber(m2Cell?.textContent);
-        const applied = toNumber(appliedCell?.textContent);
+        const m1 =
+            toNumber(m1Input?.value);
 
+        const m2 =
+            toNumber(m2Input?.value);
+
+        const savedUncertainty =
+            toNumber(uncertaintyInput?.value);
 
         // =====================================================
         // REPEATABILITY
@@ -778,6 +728,86 @@ document.addEventListener("DOMContentLoaded", function () {
                 );
         }
 
+        // =========================================================
+        // PASS / FAIL CRITERIA
+        //
+        // Tolerance = UUC Full Scale × Accuracy / 100
+        //
+        // M1 difference = A - M1
+        // M2 difference = A - M2
+        //
+        // PASS when BOTH:
+        // |A - M1| <= Tolerance
+        // |A - M2| <= Tolerance
+        // =========================================================
+
+        let passFail = "—";
+
+        if (
+            Number.isFinite(fullScale) &&
+            Number.isFinite(accuracy) &&
+            Number.isFinite(applied) &&
+            Number.isFinite(m1) &&
+            Number.isFinite(m2)
+        ) {
+
+            // ---------------------------------------------------------
+            // TOLERANCE
+            // Example:
+            // Full Scale = 40 bar
+            // Accuracy = 1%
+            //
+            // Tolerance = 40 × 1 / 100 = 0.4 bar
+            // ---------------------------------------------------------
+
+            const tolerance =
+                Math.abs(fullScale) *
+                (Math.abs(accuracy) / 100);
+
+
+            // ---------------------------------------------------------
+            // DIFFERENCE BETWEEN APPLIED PRESSURE AND M1
+            // ---------------------------------------------------------
+
+            const m1Difference =
+                applied - m1;
+
+
+            // ---------------------------------------------------------
+            // DIFFERENCE BETWEEN APPLIED PRESSURE AND M2
+            // ---------------------------------------------------------
+
+            const m2Difference =
+                applied - m2;
+
+
+            // ---------------------------------------------------------
+            // CHECK M1
+            // ---------------------------------------------------------
+
+            const m1Pass =
+                Math.abs(m1Difference) <= tolerance;
+
+
+            // ---------------------------------------------------------
+            // CHECK M2
+            // ---------------------------------------------------------
+
+            const m2Pass =
+                Math.abs(m2Difference) <= tolerance;
+
+
+            // ---------------------------------------------------------
+            // OVERALL RESULT
+            //
+            // Both M1 and M2 must be within tolerance.
+            // ---------------------------------------------------------
+
+            passFail =
+                m1Pass && m2Pass
+                    ? "PASS"
+                    : "FAIL";
+        }
 
         // =====================================================
         // DISPLAY RESULTS
@@ -822,7 +852,139 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         );
 
+
+        // =========================================================
+        // DISPLAY PASS / FAIL
+        // =========================================================
+
+        const passFailField =
+            row.querySelector(".pass-fail-field");
+
+        const remarksInput =
+            row.querySelector('input[name$="-remarks"]');
+
+        if (passFailField) {
+            passFailField.value = passFail;
+        }
+
+        if (remarksInput) {
+            remarksInput.value = passFail;
+        }
+
+    };
+
+    // =========================================================
+    // CALCULATE ALL EXISTING ROWS
+    // =========================================================
+
+    document.querySelectorAll("#results-body .result-row").forEach(function (row) {
+        calculateResultRow(row);
     });
+
+
+    // =========================================================
+    // RECALCULATE WHEN A / M1 / M2 CHANGES
+    // =========================================================
+
+    document.querySelectorAll(
+            '#results-body input[name$="-applied_value"], ' +
+            '#results-body input[name$="-upward_reading"], ' +
+            '#results-body input[name$="-downward_reading"]'
+        )
+        .forEach(function (input) {
+
+            input.addEventListener("input", function () {
+                const row = input.closest(".result-row");
+
+                if (row) {
+                    calculateResultRow(row);
+                }
+            });
+
+        });
+
+        // =========================================================
+        // ADD RESULT ROW
+        // =========================================================
+
+        const addResultButton =
+            document.getElementById("add-result");
+
+        const resultsBody =
+            document.getElementById("results-body");
+
+        const emptyRowTemplate =
+            document.getElementById("result-empty-row");
+
+        const totalFormsInput =
+            document.querySelector(
+                '#id_results-TOTAL_FORMS'
+            );
+
+
+        if (
+            addResultButton &&
+            resultsBody &&
+            emptyRowTemplate &&
+            totalFormsInput
+        ) {
+
+            addResultButton.addEventListener("click", function () {
+
+                const formIndex =
+                    parseInt(totalFormsInput.value, 10);
+
+                // Get empty row HTML
+                let rowHtml =
+                    emptyRowTemplate.innerHTML;
+
+                // Replace __prefix__ with actual form index
+                rowHtml =
+                    rowHtml.replace(
+                        /__prefix__/g,
+                        formIndex
+                    );
+
+                // Add the new row
+                resultsBody.insertAdjacentHTML(
+                    "beforeend",
+                    rowHtml
+                );
+
+                // Increase TOTAL_FORMS
+                totalFormsInput.value =
+                    formIndex + 1;
+
+                // Get the newly added row
+                const newRow =
+                    resultsBody.lastElementChild;
+
+                // Calculate the row
+                calculateResultRow(newRow);
+
+                // Add live calculation listeners
+                newRow
+                    .querySelectorAll(
+                        'input[name$="-applied_value"], ' +
+                        'input[name$="-upward_reading"], ' +
+                        'input[name$="-downward_reading"]'
+                    )
+                    .forEach(function (input) {
+
+                        input.addEventListener(
+                            "input",
+                            function () {
+
+                                calculateResultRow(newRow);
+
+                            }
+                        );
+
+                    });
+
+            });
+
+        }
 
 });
 </script>

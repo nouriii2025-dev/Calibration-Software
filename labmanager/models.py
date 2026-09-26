@@ -90,97 +90,6 @@ class Job(models.Model):
         return self.quantity - self.certificates_assigned_count
 
 
-# class Certificate(models.Model):
-#     """One certificate slot generated for a Job. `number` follows the
-#     AF-###### sequential format and is fixed once generated."""
-
-#     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="certificates")
-#     number = models.CharField(max_length=20, unique=True, editable=False)
-#     line_item = models.ForeignKey(
-#         "JobLineItem", on_delete=models.SET_NULL, null=True, blank=True, related_name="certificates"
-#     )
-
-#     # --- Device under test ---
-#     device_serial = models.CharField(max_length=100, blank=True)
-#     device_manufacturer = models.CharField(max_length=150, blank=True)
-#     device_resolution = models.DecimalField(
-#         max_digits=20,
-#         decimal_places=3,
-#         null=True,
-#         blank=True,
-#     )
-#     device_accuracy = models.CharField(max_length=100, blank=True)
-#     device_ratio = models.DecimalField(
-#         max_digits=20,
-#         decimal_places=3,
-#         null=True,
-#         blank=True,
-#     )
-
-#     reference_instrument_range = models.DecimalField(
-#     max_digits=20,
-#     decimal_places=4,
-#     null=True,
-#     blank=True,
-#     )
-
-#     uuc_full_scale = models.DecimalField(
-#         max_digits=20,
-#         decimal_places=4,
-#         null=True,
-#         blank=True,
-#     )
-
-#     uuc_unit = models.CharField(
-#         max_length=20,
-#         blank=True,
-#     )
-
-#     pressure_media = models.CharField(
-#         max_length=30,
-#         blank=True,
-#     )
-#     # --- Working standard used to calibrate it ---
-#     working_standard_name = models.CharField(max_length=150, blank=True)
-#     working_standard_serial = models.CharField(max_length=100, blank=True)
-#     working_standard_certificate_no = models.CharField(max_length=100, blank=True)
-
-#     # --- Calibration conditions ---
-#     lab_temperature = models.CharField(max_length=50, blank=True, help_text="e.g. 23 \u00b1 2 \u00b0C")
-#     lab_humidity = models.CharField(max_length=50, blank=True, help_text="e.g. 45 \u00b1 10 %RH")
-#     ambient_pressure = models.CharField(max_length=50, blank=True)
-#     reference_procedure = models.CharField(max_length=150, blank=True)
-#     temperature_variation = models.CharField(max_length=50, blank=True)
-#     condition_notes = models.TextField(blank=True)
-
-#     # --- Sign-off ---
-#     calibration_date = models.DateField(null=True, blank=True)
-#     issue_date = models.DateField(null=True, blank=True)
-#     calibrated_by = models.CharField(max_length=150, blank=True)
-#     approved_signatory = models.CharField(max_length=150, blank=True)
-
-#     class Meta:
-#         ordering = ["number"]
-
-#     def __str__(self):
-#         return self.number
-
-#     @staticmethod
-#     def generate_number():
-#         last = Certificate.objects.aggregate(Max("number")).get("number__max")
-#         seq = int(last.split("-")[1]) + 1 if last else 116444
-#         return f"AF-{seq}"
-
-#     def save(self, *args, **kwargs):
-#         if not self.number:
-#             self.number = self.generate_number()
-#         super().save(*args, **kwargs)
-
-#     @property
-#     def is_complete(self):
-#         """Whether the calibration detail has been filled in, for a quick
-#         status indicator on the job detail page."""
-#         return bool(self.calibration_date and self.calibrated_by and self.results.exists())
 class Certificate(models.Model):
     """One certificate slot generated for a Job."""
 
@@ -197,6 +106,7 @@ class Certificate(models.Model):
     # --- Device under test ---
     device_serial = models.CharField(max_length=100, blank=True)
     device_manufacturer = models.CharField(max_length=150, blank=True)
+    device_tag_number = models.CharField(max_length=100, blank=True)
 
     device_resolution = models.DecimalField(
         max_digits=20,
@@ -253,6 +163,7 @@ class Certificate(models.Model):
 
     # --- Sign-off ---
     calibration_date = models.DateField(null=True, blank=True)
+    re_calibration_date = models.DateField(null=True, blank=True)
     issue_date = models.DateField(null=True, blank=True)
     calibrated_by = models.CharField(max_length=150, blank=True)
     approved_signatory = models.CharField(max_length=150, blank=True)
@@ -473,14 +384,7 @@ class JobLineItem(models.Model):
     def __str__(self):
         return f"{self.instrument} x{self.quantity} ({self.job.job_number})"
 
-    # @property
-    # def certificate_range(self):
-    #     certs = list(self.certificates.order_by("number"))
-    #     if not certs:
-    #         return "—"
-    #     if len(certs) == 1:
-    #         return certs[0].number
-    #     return f"{certs[0].number} – {certs[-1].number}"
+
     @property
     def certificate_range(self):
         numbers = list(

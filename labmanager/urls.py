@@ -20,5 +20,10 @@ urlpatterns = [
     "uncertainty/<int:pk>/",
     views.uncertainty,
     name="uncertainty",
-),
+    ),
+    path(
+    "certificate/<int:pk>/save-uncertainty/",
+    views.save_uncertainty,
+    name="save_uncertainty",
+    ),
 ]

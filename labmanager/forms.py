@@ -84,58 +84,6 @@ JobDocumentFormSet = inlineformset_factory(
 )
 
 
-# class CertificateForm(forms.ModelForm):
-#     certificate_number = forms.CharField(
-#         label="Certificate No.",
-#         required=False,
-#         disabled=True,
-#     )
-
-#     class Meta:
-#         model = Certificate
-#         fields = [
-#             "device_serial",
-#             "device_manufacturer",
-#             "device_resolution",
-#             "device_accuracy",
-#             "device_ratio",
-#             "working_standard_name",
-#             "working_standard_serial",
-#             "working_standard_certificate_no",
-#             "lab_temperature",
-#             "lab_humidity",
-#             "ambient_pressure",
-#             "reference_procedure",
-#             "temperature_variation",
-#             "condition_notes",
-#             "calibration_date",
-#             "issue_date",
-#             "calibrated_by",
-#             "approved_signatory",
-#         ]
-#         widgets = {
-#             "condition_notes": forms.Textarea(attrs={"rows": 2}),
-#             "calibration_date": forms.DateInput(attrs={"type": "date"}),
-#             "issue_date": forms.DateInput(attrs={"type": "date"}),
-#         }
-
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-
-#         # Show the automatically generated certificate number
-#         if self.instance and self.instance.pk:
-#             self.fields["certificate_number"].initial = self.instance.number
-
-#             # For older certificates where reference_procedure is blank,
-#             # take it from the assigned job line item.
-#             if (
-#                 not self.instance.reference_procedure
-#                 and self.instance.line_item
-#             ):
-#                 self.fields["reference_procedure"].initial = (
-#                     self.instance.line_item.reference_procedure
-#                 )
-
 class CertificateForm(forms.ModelForm):
     certificate_number = forms.CharField(
         label="Certificate No.",
@@ -167,6 +115,7 @@ class CertificateForm(forms.ModelForm):
         fields = [
             "device_serial",
             "device_manufacturer",
+            "device_tag_number",
             "device_resolution",
             "device_accuracy",
             "device_ratio",
@@ -184,6 +133,7 @@ class CertificateForm(forms.ModelForm):
             "temperature_variation",
             "condition_notes",
             "calibration_date",
+            "re_calibration_date",
             "issue_date",
             "calibrated_by",
             "approved_signatory",
@@ -191,6 +141,7 @@ class CertificateForm(forms.ModelForm):
         widgets = {
             "condition_notes": forms.Textarea(attrs={"rows": 2}),
             "calibration_date": forms.DateInput(attrs={"type": "date"}),
+            "re_calibration_date" : forms.DateInput(attrs={"type": "date"}),
             "issue_date": forms.DateInput(attrs={"type": "date"}),
             "reference_instrument_range": forms.NumberInput(
                 attrs={"step": "any"}

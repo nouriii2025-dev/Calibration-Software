@@ -189,17 +189,40 @@
 
                 <tr>
                     <td><strong>Date of Issue</strong></td>
-                    <td>{{ certificate.issue_date|date:"d-M-Y" }}</td>
+                    <td>
+                        {% if certificate.issue_date %}
+                            {{ certificate.issue_date|date:"d-M-Y" }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
                 </tr>
 
                 <tr>
                     <td><strong>Date of Calibration</strong></td>
-                    <td>{{ certificate.calibration_date|date:"d-M-Y" }}</td>
+                    <td>
+                        {% if certificate.calibration_date %}
+                            {{ certificate.calibration_date|date:"d-M-Y" }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                </tr>
+
+                <tr>
+                    <td><strong>Date of Re-Calibration</strong></td>
+                    <td>
+                        {% if certificate.re_calibration_date %}
+                            {{ certificate.re_calibration_date|date:"d-M-Y" }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
                 </tr>
 
                 <tr>
                     <td><strong>Approved Signatory</strong></td>
-                    <td>{{ certificate.approved_signatory }}</td>
+                    <td>{{ certificate.approved_signatory|default:"—" }}</td>
                 </tr>
             </table>
         </div>
@@ -256,9 +279,7 @@
         <tr>
             <td class="label">Instrument</td>
             <td>
-                {% if certificate.line_item %}
-                    {{ certificate.line_item.instrument.name }}
-                {% endif %}
+                {{ certificate.line_item.instrument|default:"—" }}
             </td>
 
             <td class="label">Manufacturer</td>
@@ -270,9 +291,7 @@
         <tr>
             <td class="label">Model</td>
             <td>
-                {% if certificate.line_item %}
-                    {{ certificate.line_item.model }}
-                {% endif %}
+                {{ certificate.line_item.model|default:"—" }}
             </td>
 
             <td class="label">Serial Number</td>
@@ -282,11 +301,18 @@
         </tr>
 
         <tr>
-            <td class="label">Range</td>
+           <!-- <td class="label">Range</td>
             <td>
                 {% if certificate.line_item %}
-                    {{ certificate.line_item.range }}
+                    {{ certificate.line_item.range_from }} - {{ certificate.line_item.range_to }}
+                    {{ certificate.line_item.unit }}
+                {% else %}
+                    —
                 {% endif %}
+            </td> -->
+            <td class="label">Tag Number</td>
+            <td>
+                {{ certificate.device_tag_number }}
             </td>
 
             <td class="label">Resolution</td>
@@ -296,13 +322,29 @@
         </tr>
 
         <tr>
+            <!-- <td class="label">Accuracy</td>
+            <td>
+                {{ certificate.device_accuracy }}
+            </td> -->
+            <td class="label">Range</td>
+            <td>
+                {% if certificate.line_item %}
+                    {{ certificate.line_item.range_from }} - {{ certificate.line_item.range_to }}
+                    {{ certificate.line_item.unit }}
+                {% else %}
+                    —
+                {% endif %}
+            </td>
             <td class="label">Accuracy</td>
             <td>
                 {{ certificate.device_accuracy }}
             </td>
-
-            <td></td>
-            <td></td>
+        </tr>
+        <tr>
+            <td class="label">Ratio</td>
+            <td>
+                {{ certificate.device_ratio }}
+            </td>
         </tr>
     </table>
 
